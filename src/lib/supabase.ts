@@ -33,4 +33,7 @@ export interface License {
   created_at: string;
   last_check_at: string | null;
   notes: string | null;
+  logo: string | null;
+  email: string | null;
+  telephone: string | null;
 }
