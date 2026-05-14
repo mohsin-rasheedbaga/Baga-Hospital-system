@@ -3,7 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "next-themes";
 
 export const metadata: Metadata = {
-  title: "UWH - Admin Panel",
+  title: "BAGA - Admin Panel",
   description: "License Management System",
 };
 
@@ -11,13 +11,13 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ur" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
       </head>
-      <body className="antialiased" style={{ fontFamily: "'Inter', 'Noto Sans Arabic', sans-serif" }}>
+      <body className="antialiased" style={{ fontFamily: "'Inter', sans-serif" }}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           {children}
         </ThemeProvider>
