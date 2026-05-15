@@ -1,27 +1,18 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import { ThemeProvider } from "next-themes";
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: "BAGA - Admin Panel",
-  description: "License Management System",
+  title: 'BAGA Hospital Management System',
+  description: 'Complete Hospital Management System by BAGA',
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-      </head>
-      <body className="antialiased" style={{ fontFamily: "'Inter', sans-serif" }}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          {children}
-        </ThemeProvider>
-      </body>
+    <html lang="en">
+      <body className={inter.className}>{children}</body>
     </html>
   );
 }
