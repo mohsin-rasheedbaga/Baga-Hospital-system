@@ -317,7 +317,7 @@ export default function LabPage() {
                     </div>
                   ) : (
                     <div className="mt-4 text-center py-4 text-slate-400">
-                      Is patient ke liye koi lab order nahi mila. Doctor ne abhi tak koi test recommend nahi kiya.
+                      No lab orders found for this patient. The doctor has not recommended any tests yet.
                     </div>
                   )}
                 </div>
@@ -389,7 +389,7 @@ export default function LabPage() {
                   ))}
                   {orders.length === 0 && (
                     <tr><td colSpan={8} className="text-center py-8 text-slate-400">
-                      {tab === 'pending' ? 'Koi pending test nahi' : tab === 'in-progress' ? 'Koi in-progress test nahi' : 'Koi completed test nahi'}
+                      {tab === 'pending' ? 'No pending tests' : tab === 'in-progress' ? 'No tests in progress' : 'No completed tests'}
                     </td></tr>
                   )}
                 </tbody>

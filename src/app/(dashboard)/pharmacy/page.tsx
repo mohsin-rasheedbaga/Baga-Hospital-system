@@ -4,6 +4,7 @@ import {
   searchPatients, searchMedicines, getMedicines, addMedicine, updateMedicine, deleteMedicine,
   getMedicineCategories, getActivePrescriptions, updatePrescription, addDispense,
   getPatientCounter, setPatientCounter, addPatient, genId, todayStr, timeStr, getHospitalSettings,
+  getExpiredMedicines, getLowStockMedicines,
 } from '@/lib/store';
 import type { Patient, Prescription, MedicineItem } from '@/lib/types';
 
@@ -52,7 +53,20 @@ function getOutdoorCounter(): number { return lsGet<number>(OUTDOOR_COUNTER_KEY,
 function setOutdoorCounter(n: number): void { lsSet(OUTDOOR_COUNTER_KEY, n); }
 
 export default function PharmacyPage() {
-  const [mainTab, setMainTab] = useState<'pos' | 'prescriptions' | 'inventory'>('pos');
+  const [initialTab, setInitialTab] = useState<'pos' | 'prescriptions' | 'inventory' | 'reports'>('pos');
+  const [mainTab, setMainTab] = useState<'pos' | 'prescriptions' | 'inventory' | 'reports'>('pos');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab === 'inventory') setInitialTab('inventory');
+      else if (tab === 'reports') setInitialTab('reports');
+      else if (tab === 'prescriptions') setInitialTab('prescriptions');
+      else setInitialTab('pos');
+    }
+  }, []);
+  useEffect(() => { setMainTab(initialTab); }, [initialTab]);
 
   /* ==================== SHARED ==================== */
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -262,6 +276,15 @@ export default function PharmacyPage() {
   const [editPriceMed, setEditPriceMed] = useState<MedicineItem | null>(null);
   const [editPriceVal, setEditPriceVal] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<MedicineItem | null>(null);
+  const [expiredMeds, setExpiredMeds] = useState<MedicineItem[]>([]);
+  const [lowStockMeds, setLowStockMeds] = useState<MedicineItem[]>([]);
+
+  useEffect(() => {
+    if (mainTab === 'inventory') {
+      setExpiredMeds(getExpiredMedicines());
+      setLowStockMeds(getLowStockMedicines());
+    }
+  }, [mainTab, medicines]);
 
   // Medicine form
   const [fName, setFName] = useState('');
@@ -317,6 +340,7 @@ export default function PharmacyPage() {
       addMedicine({
         id: genId(), name: fName.trim(), genericName: fGeneric.trim(), form: fForm as MedicineItem['form'],
         strength: fStrength.trim(), packing: fPacking.trim(), price: Number(fPrice), category: cat, active: true,
+        stock: 0, expiryDate: '', minStock: 10,
       });
       showToast('New medicine added successfully', 'success');
     }
@@ -370,6 +394,10 @@ export default function PharmacyPage() {
           <button onClick={() => setMainTab('inventory')} className={`btn ${mainTab === 'inventory' ? 'btn-primary' : 'btn-outline'}`}>
             <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
             Medicine Inventory
+          </button>
+          <button onClick={() => setMainTab('reports')} className={`btn ${mainTab === 'reports' ? 'btn-primary' : 'btn-outline'}`}>
+            <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            Sales Reports
           </button>
         </div>
       </div>
@@ -862,6 +890,167 @@ export default function PharmacyPage() {
         </>
       )}
 
+      {/* ==================== REPORTS TAB ==================== */}
+      {mainTab === 'reports' && (
+        <>
+          {/* Report Stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="stat-card card-hover border border-emerald-200 bg-emerald-50">
+              <p className="text-xs text-emerald-600 font-medium">Today&apos;s Sales</p>
+              <p className="text-2xl font-bold text-emerald-700">{currency} {todayTotal.toLocaleString()}</p>
+            </div>
+            <div className="stat-card card-hover border border-blue-200 bg-blue-50">
+              <p className="text-xs text-blue-600 font-medium">Indoor Sales</p>
+              <p className="text-2xl font-bold text-blue-700">{currency} {todaySales.filter(s => s.type === 'Indoor').reduce((a, s) => a + s.totalAmount, 0).toLocaleString()}</p>
+            </div>
+            <div className="stat-card card-hover border border-amber-200 bg-amber-50">
+              <p className="text-xs text-amber-600 font-medium">Outdoor Sales</p>
+              <p className="text-2xl font-bold text-amber-700">{currency} {todaySales.filter(s => s.type === 'Outdoor').reduce((a, s) => a + s.totalAmount, 0).toLocaleString()}</p>
+            </div>
+            <div className="stat-card card-hover border border-purple-200 bg-purple-50">
+              <p className="text-xs text-purple-600 font-medium">Total Transactions</p>
+              <p className="text-2xl font-bold text-purple-700">{todaySales.length}</p>
+            </div>
+          </div>
+
+          {/* Medicine-wise Sales Summary */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200">
+              <h3 className="font-bold text-slate-800">Medicine-wise Sales Summary (Today)</h3>
+              <p className="text-xs text-slate-400 mt-1">Breakdown of all medicines sold today</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Medicine Name</th>
+                    <th>Form</th>
+                    <th>Strength</th>
+                    <th>Total Qty Sold</th>
+                    <th>Unit Price</th>
+                    <th className="text-right">Total Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const medMap: Record<string, { name: string; form: string; strength: string; price: number; qty: number; total: number }> = {};
+                    todaySales.forEach(sale => {
+                      sale.items.forEach(item => {
+                        const key = item.medicineId;
+                        if (!medMap[key]) {
+                          medMap[key] = { name: item.name, form: item.form, strength: item.strength, price: item.price, qty: 0, total: 0 };
+                        }
+                        medMap[key].qty += item.quantity;
+                        medMap[key].total += item.total;
+                      });
+                    });
+                    const sorted = Object.values(medMap).sort((a, b) => b.total - a.total);
+                    return sorted.length === 0 ? (
+                      <tr><td colSpan={7} className="text-center py-8 text-slate-400">No sales today</td></tr>
+                    ) : sorted.map((m, i) => (
+                      <tr key={i}>
+                        <td className="text-slate-400 font-medium">{i + 1}</td>
+                        <td className="font-semibold">{m.name}</td>
+                        <td><span className="badge badge-blue">{m.form}</span></td>
+                        <td className="text-sm">{m.strength}</td>
+                        <td className="font-bold text-center">{m.qty}</td>
+                        <td className="text-sm">{currency} {m.price.toLocaleString()}</td>
+                        <td className="text-right font-bold text-emerald-700">{currency} {m.total.toLocaleString()}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-emerald-50 border-t-2 border-emerald-200">
+                    <td colSpan={6} className="px-4 py-3 text-right font-bold text-emerald-800">Grand Total:</td>
+                    <td className="px-4 py-3 text-right font-extrabold text-emerald-700 text-lg">{currency} {todayTotal.toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Sales by Patient Type */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <h3 className="font-bold text-slate-800 mb-3">Indoor Patient Sales ({todayIndoor})</h3>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {todaySales.filter(s => s.type === 'Indoor').length === 0 ? (
+                  <p className="text-slate-400 text-center py-4">No indoor sales today</p>
+                ) : todaySales.filter(s => s.type === 'Indoor').sort((a, b) => b.time.localeCompare(a.time)).map(s => (
+                  <div key={s.id} className="border border-slate-100 rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm text-slate-800">{s.patientName}</p>
+                      <p className="text-xs text-slate-400">{s.patientNo} | {s.time}</p>
+                    </div>
+                    <p className="font-bold text-blue-700">{currency} {s.totalAmount.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <h3 className="font-bold text-slate-800 mb-3">Outdoor Patient Sales ({todayOutdoor})</h3>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {todaySales.filter(s => s.type === 'Outdoor').length === 0 ? (
+                  <p className="text-slate-400 text-center py-4">No outdoor sales today</p>
+                ) : todaySales.filter(s => s.type === 'Outdoor').sort((a, b) => b.time.localeCompare(a.time)).map(s => (
+                  <div key={s.id} className="border border-slate-100 rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm text-slate-800">{s.patientName}</p>
+                      <p className="text-xs text-slate-400">{s.patientNo} | {s.time}</p>
+                    </div>
+                    <p className="font-bold text-amber-700">{currency} {s.totalAmount.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* All Sales History */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200">
+              <h3 className="font-bold text-slate-800">All Sales Records (Today)</h3>
+            </div>
+            <div className="overflow-x-auto max-h-72 overflow-y-auto">
+              <table className="data-table">
+                <thead className="sticky top-0 bg-white">
+                  <tr>
+                    <th>Time</th>
+                    <th>Patient No</th>
+                    <th>Patient Name</th>
+                    <th>Type</th>
+                    <th>Medicines</th>
+                    <th className="text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {todaySales.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-8 text-slate-400">No sales today</td></tr>
+                  ) : todaySales.sort((a, b) => b.time.localeCompare(a.time)).map(s => (
+                    <tr key={s.id}>
+                      <td className="text-sm text-slate-500">{s.time}</td>
+                      <td className="font-mono font-bold text-blue-600 text-sm">{s.patientNo}</td>
+                      <td className="font-medium text-sm">{s.patientName}</td>
+                      <td><span className={`badge ${s.type === 'Indoor' ? 'badge-blue' : 'badge-amber'}`}>{s.type}</span></td>
+                      <td>
+                        <div className="flex flex-wrap gap-1">
+                          {s.items.slice(0, 3).map((it, i) => (
+                            <span key={i} className="badge text-xs">{it.name} x{it.quantity}</span>
+                          ))}
+                          {s.items.length > 3 && <span className="badge badge-amber text-xs">+{s.items.length - 3}</span>}
+                        </div>
+                      </td>
+                      <td className="text-right font-bold text-emerald-700">{currency} {s.totalAmount.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* ==================== MEDICINE INVENTORY TAB ==================== */}
       {mainTab === 'inventory' && (
         <>
@@ -928,6 +1117,8 @@ export default function PharmacyPage() {
                     <th>Packing</th>
                     <th>Category</th>
                     <th className="text-right">Price</th>
+                    <th>Stock</th>
+                    <th>Expiry</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
@@ -952,6 +1143,23 @@ export default function PharmacyPage() {
                         </button>
                       </td>
                       <td>
+                        <span className={`font-semibold ${m.stock <= 0 ? 'text-red-600' : m.stock <= (m.minStock || 10) ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {m.stock}
+                        </span>
+                        {m.stock <= 0 && <span className="badge badge-rose text-xs ml-1">OUT</span>}
+                        {m.stock > 0 && m.stock <= (m.minStock || 10) && <span className="badge badge-amber text-xs ml-1">LOW</span>}
+                      </td>
+                      <td>
+                        {m.expiryDate ? (
+                          <span className={`text-sm ${m.expiryDate < todayStr() ? 'text-red-600 font-bold' : 'text-slate-600'}`}>
+                            {m.expiryDate}
+                            {m.expiryDate < todayStr() && <span className="badge badge-rose text-xs ml-1">EXPIRED</span>}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-sm">Not set</span>
+                        )}
+                      </td>
+                      <td>
                         <span className={`badge ${m.active ? 'badge-green' : 'badge-rose'}`}>
                           {m.active ? 'Active' : 'Inactive'}
                         </span>
@@ -972,13 +1180,68 @@ export default function PharmacyPage() {
                   ))}
                   {filteredMedicines.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="text-center py-12 text-slate-400">
+                      <td colSpan={11} className="text-center py-12 text-slate-400">
                         No medicines found matching your search criteria.
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Expiry & Stock Alerts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Expired Medicines */}
+            <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                <h3 className="font-bold text-red-800">Expired Medicines ({expiredMeds.length})</h3>
+              </div>
+              {expiredMeds.length === 0 ? (
+                <p className="text-red-400 text-sm text-center py-3">No expired medicines</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {expiredMeds.map(m => (
+                    <div key={m.id} className="bg-white border border-red-200 rounded-lg p-3 flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-red-800 text-sm">{m.name} ({m.strength})</p>
+                        <p className="text-xs text-red-500">{m.form} | {m.packing} | Stock: {m.stock}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-red-600">Expired: {m.expiryDate}</p>
+                        <span className="badge badge-rose text-xs">EXPIRED</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Low Stock Medicines */}
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                <h3 className="font-bold text-amber-800">Low Stock ({lowStockMeds.length})</h3>
+              </div>
+              {lowStockMeds.length === 0 ? (
+                <p className="text-amber-400 text-sm text-center py-3">All medicines are well stocked</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {lowStockMeds.filter(m => !expiredMeds.find(em => em.id === m.id)).map(m => (
+                    <div key={m.id} className="bg-white border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-amber-800 text-sm">{m.name} ({m.strength})</p>
+                        <p className="text-xs text-amber-500">{m.form} | {m.packing}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-amber-700">Stock: {m.stock}</p>
+                        <p className="text-xs text-amber-500">Min: {m.minStock}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

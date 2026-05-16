@@ -231,6 +231,9 @@ export interface MedicineItem {
   price: number;
   category: string; // e.g. "Pain Relief", "Antibiotic"
   active: boolean;
+  stock: number;         // current stock quantity
+  expiryDate: string;   // YYYY-MM-DD format
+  minStock: number;     // minimum stock level for alerts
 }
 
 export interface LabTestCatalog {

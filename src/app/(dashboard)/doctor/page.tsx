@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { searchPatients, getPatientByNo, getVisitsByPatient, getActiveVisitByPatient, addLabOrder, addPrescription, addXRayOrder, addUltrasoundOrder, updateVisit, updatePatient, getPrescriptionsByPatient, getLabOrdersByPatient, searchMedicines, genId, todayStr, timeStr, addAdmission, getAdmissionsByPatient, getHospitalSettings, getXRayOrders, getUltrasoundOrders } from '@/lib/store';
+import { searchPatients, getPatientByNo, getVisitsByPatient, getActiveVisitByPatient, addLabOrder, addPrescription, addXRayOrder, addUltrasoundOrder, updateVisit, updatePatient, getPrescriptionsByPatient, getLabOrdersByPatient, searchMedicines, genId, todayStr, timeStr, addAdmission, getAdmissionsByPatient, updateAdmission, getHospitalSettings, getXRayOrders, getUltrasoundOrders } from '@/lib/store';
 import type { Patient, Visit, LabOrder, Prescription, Admission, MedicineItem, XRayOrder, UltrasoundOrder } from '@/lib/types';
 
 const LAB_TESTS = ['CBC', 'Blood Sugar (Fasting)', 'Blood Sugar (Random)', 'Liver Function Test (LFT)', 'Kidney Function Test (KFT)', 'Urine Routine', 'Urine Culture', 'Thyroid Panel (T3,T4,TSH)', 'Lipid Profile', 'HbA1c', 'ESR', 'CRP', 'HIV', 'Hepatitis B', 'Hepatitis C', 'Dengue NS1', 'Electrolytes', 'Vitamin D', 'Iron Studies', 'Blood Group', 'PT/INR'];
@@ -152,7 +152,16 @@ export default function DoctorPage() {
     if(!confirm(`Discharge ${selectedPatient.name}?`))return;
     updateVisit(activeVisit.id,{status:'Discharged',diagnosis,notes});
     updatePatient(selectedPatient.id,{lastVisit:todayStr(),totalVisits:selectedPatient.totalVisits+1});
-    setActiveVisit(null);setSelectedPatient(null);showToast('Patient discharged!','success');
+    // Also discharge from admission if admitted
+    const patientAdmissions = getAdmissionsByPatient(selectedPatient.id);
+    const activeAdm = patientAdmissions.find(a => a.status === 'Admitted');
+    if (activeAdm) {
+      updateAdmission(activeAdm.id, { status: 'Discharged', dischargedAt: todayStr() });
+      showToast('Patient & Admission discharged successfully!', 'success');
+    } else {
+      showToast('Patient discharged!', 'success');
+    }
+    setActiveVisit(null);setSelectedPatient(null);
   };
 
   const tabs=[{key:'info',label:'Info'},{key:'vitals',label:'Vitals'},{key:'prescribe',label:'Medication'},{key:'admission',label:'Admission'},{key:'notes',label:'Diagnosis'},{key:'reports',label:'Reports'},{key:'history',label:'History'}];

@@ -5,7 +5,8 @@ import {
   getVisits, getLabOrders, getXRayOrders, getUltrasoundOrders,
   getPrescriptions, getBills, getPatients, getActiveAdmissions,
   getPendingLabOrders, getPendingXRayOrders, getPendingUltrasoundOrders,
-  getDispenses, getAdmissions, todayStr, getHospitalSettings
+  getDispenses, getAdmissions, todayStr, getHospitalSettings,
+  getExpiredMedicines, getLowStockMedicines
 } from '@/lib/store';
 
 interface Session {
@@ -133,12 +134,26 @@ export default function DashboardPage() {
 
     return (
       <div className="space-y-6">
+        {/* Quick Actions - TOP */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <ActionButton label="New Patient" desc="Register new patient" color="blue" route="/reception" />
+            <ActionButton label="New Visit" desc="Create visit" color="emerald" route="/reception" />
+            <ActionButton label="Appointment" desc="Book appointment" color="purple" route="/appointment" />
+            <ActionButton label="Admission" desc="Admit patient" color="amber" route="/admission" />
+          </div>
+        </div>
+
         {/* Today Quick Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
           <StatCard label="Today's Patients" value={todayVisits.length} sub="OPD patients today" color="blue" />
           <StatCard label="Today's Collection" value={`${currency} ${todayRevenue.toLocaleString()}`} sub="Today Collection" color="emerald" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4">
           <StatCard label="PENDING LAB TESTS" value={pendingLab.length} sub="Click to view status" color="teal" onClick={() => router.push('/lab')} />
           <StatCard label="PENDING X-RAY" value={pendingXRay.length} sub="Click to view" color="rose" onClick={() => router.push('/xray')} />
+          <StatCard label="PENDING ULTRASOUND" value={pendingUSG.length} sub="Click to view" color="indigo" onClick={() => router.push('/ultrasound')} />
         </div>
 
         {/* Monthly Stats */}
@@ -179,6 +194,62 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {/* Pending X-Ray */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-rose-300 transition-colors" onClick={() => router.push('/xray')}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-slate-800">Pending X-Ray ({pendingXRay.length})</h2>
+            <span className="badge badge-rose">Click to View</span>
+          </div>
+          {pendingXRay.length === 0 ? (
+            <p className="text-slate-400 text-center py-4">No pending X-Ray orders</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead><tr><th>Patient No</th><th>Patient Name</th><th>X-Ray Type</th><th>Doctor</th><th>Status</th></tr></thead>
+                <tbody>
+                  {pendingXRay.slice(0, 5).map(o => (
+                    <tr key={o.id}>
+                      <td className="font-mono font-bold text-blue-600">{o.patientNo}</td>
+                      <td className="font-medium">{o.patientName}</td>
+                      <td><span className="badge badge-rose">{o.xrayType}</span></td>
+                      <td className="text-sm">{o.orderedBy}</td>
+                      <td><span className={`badge ${o.status==='Pending'?'badge-amber':'badge-blue'}`}>{o.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Pending Ultrasound */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-indigo-300 transition-colors" onClick={() => router.push('/ultrasound')}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-slate-800">Pending Ultrasound ({pendingUSG.length})</h2>
+            <span className="badge badge-indigo">Click to View</span>
+          </div>
+          {pendingUSG.length === 0 ? (
+            <p className="text-slate-400 text-center py-4">No pending ultrasound orders</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead><tr><th>Patient No</th><th>Patient Name</th><th>USG Type</th><th>Doctor</th><th>Status</th></tr></thead>
+                <tbody>
+                  {pendingUSG.slice(0, 5).map(o => (
+                    <tr key={o.id}>
+                      <td className="font-mono font-bold text-blue-600">{o.patientNo}</td>
+                      <td className="font-medium">{o.patientName}</td>
+                      <td><span className="badge badge-indigo">{o.usgType}</span></td>
+                      <td className="text-sm">{o.orderedBy}</td>
+                      <td><span className={`badge ${o.status==='Pending'?'badge-amber':'badge-blue'}`}>{o.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         {/* Today's Visit List */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Today's Visits</h2>
@@ -197,17 +268,6 @@ export default function DashboardPage() {
                 {todayVisits.length===0 && <tr><td colSpan={7} className="text-center py-8 text-slate-400">No visits today</td></tr>}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        {/* Quick Actions - ONLY Reception Actions */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <ActionButton label="New Patient" desc="Register new patient" color="blue" route="/reception" />
-            <ActionButton label="New Visit" desc="Create visit" color="emerald" route="/reception" />
-            <ActionButton label="Appointment" desc="Book appointment" color="purple" route="/appointment" />
-            <ActionButton label="Admission" desc="Admit patient" color="amber" route="/admission" />
           </div>
         </div>
       </div>
@@ -408,11 +468,64 @@ export default function DashboardPage() {
           <p className="text-amber-200 text-sm">Medicine Dispensing</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           <StatCard label="PENDING SCRIPTS" value={activeScripts.length} sub="Awaiting dispensing" color="amber" onClick={() => router.push('/pharmacy')} />
-          <StatCard label="DISPENSED" value={dispensed.length} sub="Completed today" color="green" />
+          <StatCard label="DISPENSED" value={dispensed.length} sub="Completed" color="green" />
           <StatCard label="TOTAL" value={allPrescriptions.length} sub="All prescriptions" color="purple" />
+          <StatCard label="EXPIRED MEDICINES" value={getExpiredMedicines().length} sub="Need removal" color="rose" onClick={() => router.push('/pharmacy?tab=inventory')} />
+          <StatCard label="LOW STOCK" value={getLowStockMedicines().length} sub="Need reorder" color="amber" onClick={() => router.push('/pharmacy?tab=inventory')} />
         </div>
+
+        {/* Expiry & Stock Alerts */}
+        {(() => {
+          const expiredMeds = getExpiredMedicines();
+          const lowStockMeds = getLowStockMedicines();
+          if (expiredMeds.length === 0 && lowStockMeds.length === 0) return null;
+          return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {expiredMeds.length > 0 && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 cursor-pointer hover:border-red-400 transition-colors" onClick={() => router.push('/pharmacy?tab=inventory')}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                      <h3 className="font-bold text-red-800">Expired Medicines ({expiredMeds.length})</h3>
+                    </div>
+                    <span className="badge badge-rose">Click to View</span>
+                  </div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {expiredMeds.slice(0, 5).map(m => (
+                      <div key={m.id} className="flex items-center justify-between bg-white border border-red-200 rounded px-3 py-1.5 text-sm">
+                        <span className="text-red-800 font-medium">{m.name} ({m.strength})</span>
+                        <span className="text-xs text-red-500">{m.expiryDate}</span>
+                      </div>
+                    ))}
+                    {expiredMeds.length > 5 && <p className="text-xs text-red-400 text-center">+{expiredMeds.length - 5} more</p>}
+                  </div>
+                </div>
+              )}
+              {lowStockMeds.length > 0 && (
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 cursor-pointer hover:border-amber-400 transition-colors" onClick={() => router.push('/pharmacy?tab=inventory')}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                      <h3 className="font-bold text-amber-800">Low Stock ({lowStockMeds.length})</h3>
+                    </div>
+                    <span className="badge badge-amber">Click to View</span>
+                  </div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {lowStockMeds.filter(m => !expiredMeds.find(em => em.id === m.id)).slice(0, 5).map(m => (
+                      <div key={m.id} className="flex items-center justify-between bg-white border border-amber-200 rounded px-3 py-1.5 text-sm">
+                        <span className="text-amber-800 font-medium">{m.name} ({m.strength})</span>
+                        <span className="text-xs text-amber-600">Stock: {m.stock} (Min: {m.minStock})</span>
+                      </div>
+                    ))}
+                    {lowStockMeds.length > 5 && <p className="text-xs text-amber-400 text-center">+{lowStockMeds.length - 5} more</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Pending Prescriptions */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-amber-300" onClick={() => router.push('/pharmacy')}>
