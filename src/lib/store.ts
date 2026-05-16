@@ -1,5 +1,5 @@
 /* ========== DATA STORE - Offline / LocalStorage ========== */
-import type { Hospital, HospitalSettings, User, Patient, Visit, LabOrder, Prescription, DispenseRecord, Bill, XRayOrder, UltrasoundOrder } from './types';
+import type { Hospital, HospitalSettings, User, Patient, Visit, LabOrder, Prescription, DispenseRecord, Bill, XRayOrder, UltrasoundOrder, Appointment, Admission } from './types';
 
 const KEYS = {
   hospital: 'baga_hospital',
@@ -14,6 +14,8 @@ const KEYS = {
   xrayOrders: 'baga_xray_orders',
   ultrasoundOrders: 'baga_ultrasound_orders',
   patientCounter: 'baga_patient_counter',
+  appointments: 'baga_appointments',
+  admissions: 'baga_admissions',
 };
 
 /* ========== Generic Helpers ========== */
@@ -104,9 +106,9 @@ export function setPatientCounter(n: number): void { set(KEYS.patientCounter, n)
 
 /* ========== VISITS ========== */
 const defaultVisits: Visit[] = [
-  { id: 'v1', patientId: 'p1', patientNo: 'BAGA-0001', patientName: 'Muhammad Ali', department: 'Cardiology', doctor: 'Dr. Muhammad Ali', doctorFee: 2500, date: '2025-05-16', time: '09:30 AM', status: 'Active', diagnosis: 'Chest pain - under investigation', notes: 'Patient reports chest pain for 3 days', vitals: { bp: '140/90', pulse: '88', temp: '98.6F', weight: '75kg' } },
-  { id: 'v2', patientId: 'p2', patientNo: 'BAGA-0002', patientName: 'Fatima Bibi', department: 'Gynecology', doctor: 'Dr. Sara Khan', doctorFee: 2000, date: '2025-05-16', time: '10:15 AM', status: 'Active', diagnosis: 'Prenatal checkup', notes: 'Routine pregnancy checkup', vitals: { bp: '120/80', pulse: '76', temp: '98.4F', weight: '65kg' } },
-  { id: 'v3', patientId: 'p3', patientNo: 'BAGA-0003', patientName: 'Ahmed Khan', department: 'Orthopedic', doctor: 'Dr. Bilal Siddiqui', doctorFee: 1800, date: '2025-05-16', time: '11:00 AM', status: 'Active', diagnosis: 'Knee pain - suspected ligament injury', notes: 'Pain in right knee after fall', vitals: { bp: '130/85', pulse: '80', temp: '98.6F', weight: '80kg' } },
+  { id: 'v1', patientId: 'p1', patientNo: 'BAGA-0001', patientName: 'Muhammad Ali', department: 'Cardiology', doctor: 'Dr. Muhammad Ali', doctorFee: 2500, tokenNo: 1, date: '2025-05-16', time: '09:30 AM', status: 'Active', diagnosis: 'Chest pain - under investigation', notes: 'Patient reports chest pain for 3 days', vitals: { bp: '140/90', pulse: '88', temp: '98.6F', weight: '75kg' } },
+  { id: 'v2', patientId: 'p2', patientNo: 'BAGA-0002', patientName: 'Fatima Bibi', department: 'Gynecology', doctor: 'Dr. Sara Khan', doctorFee: 2000, tokenNo: 2, date: '2025-05-16', time: '10:15 AM', status: 'Active', diagnosis: 'Prenatal checkup', notes: 'Routine pregnancy checkup', vitals: { bp: '120/80', pulse: '76', temp: '98.4F', weight: '65kg' } },
+  { id: 'v3', patientId: 'p3', patientNo: 'BAGA-0003', patientName: 'Ahmed Khan', department: 'Orthopedic', doctor: 'Dr. Bilal Siddiqui', doctorFee: 1800, tokenNo: 3, date: '2025-05-16', time: '11:00 AM', status: 'Active', diagnosis: 'Knee pain - suspected ligament injury', notes: 'Pain in right knee after fall', vitals: { bp: '130/85', pulse: '80', temp: '98.6F', weight: '80kg' } },
 ];
 
 export function getVisits(): Visit[] { return get(KEYS.visits, defaultVisits); }
@@ -248,6 +250,30 @@ export function updateUltrasoundOrder(id: string, data: Partial<UltrasoundOrder>
 }
 export function getUltrasoundOrdersByVisit(visitId: string): UltrasoundOrder[] { return getUltrasoundOrders().filter(o => o.visitId === visitId); }
 export function getPendingUltrasoundOrders(): UltrasoundOrder[] { return getUltrasoundOrders().filter(o => o.status !== 'Completed'); }
+
+/* ========== APPOINTMENTS ========== */
+export function getAppointments(): Appointment[] { return get(KEYS.appointments, []); }
+export function setAppointments(a: Appointment[]): void { set(KEYS.appointments, a); }
+export function addAppointment(a: Appointment): void { const all = getAppointments(); all.push(a); setAppointments(all); }
+export function updateAppointment(id: string, data: Partial<Appointment>): void {
+  setAppointments(getAppointments().map(a => a.id === id ? { ...a, ...data } : a));
+}
+export function getAppointmentsByPatient(patientId: string): Appointment[] { return getAppointments().filter(a => a.patientId === patientId); }
+export function getTodayAppointments(): Appointment[] { return getAppointments().filter(a => a.appointmentDate === todayStr() && a.status === 'Scheduled'); }
+
+/* ========== ADMISSIONS ========== */
+export function getAdmissions(): Admission[] { return get(KEYS.admissions, []); }
+export function setAdmissions(a: Admission[]): void { set(KEYS.admissions, a); }
+export function addAdmission(a: Admission): void { const all = getAdmissions(); all.push(a); setAdmissions(all); }
+export function updateAdmission(id: string, data: Partial<Admission>): void {
+  setAdmissions(getAdmissions().map(a => a.id === id ? { ...a, ...data } : a));
+}
+export function getAdmissionsByPatient(patientId: string): Admission[] { return getAdmissions().filter(a => a.patientId === patientId); }
+export function getActiveAdmissions(): Admission[] { return getAdmissions().filter(a => a.status === 'Admitted'); }
+export function getNextTokenNo(): number {
+  const todayVisits = getVisits().filter(v => v.date === todayStr());
+  return todayVisits.length + 1;
+}
 
 /* ========== UTILITY ========== */
 export function todayStr(): string { return new Date().toISOString().split('T')[0]; }

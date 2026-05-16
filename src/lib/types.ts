@@ -52,6 +52,7 @@ export interface Visit {
   department: string;
   doctor: string;
   doctorFee: number;
+  tokenNo: number;
   date: string;
   time: string;
   status: 'Active' | 'Completed' | 'Discharged';
@@ -142,7 +143,7 @@ export interface Bill {
 export interface BillItem {
   description: string;
   amount: number;
-  type: 'Consultation' | 'Lab' | 'X-Ray' | 'Ultrasound' | 'Pharmacy' | 'Card' | 'Renewal';
+  type: 'Consultation' | 'Lab' | 'X-Ray' | 'Ultrasound' | 'Pharmacy' | 'Card' | 'Renewal' | 'Admission';
   selected: boolean;
   quantity: number;
 }
@@ -175,4 +176,33 @@ export interface UltrasoundOrder {
   date: string;
   status: 'Pending' | 'In Progress' | 'Completed';
   report?: string;
+}
+
+export interface Appointment {
+  id: string;
+  patientId: string;
+  patientNo: string;
+  patientName: string;
+  department: string;
+  doctor: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  purpose: string;
+  status: 'Scheduled' | 'Completed' | 'Cancelled';
+  createdAt: string;
+}
+
+export interface Admission {
+  id: string;
+  patientId: string;
+  patientNo: string;
+  patientName: string;
+  department: string;
+  doctor: string;
+  admissionDate: string;
+  purpose: string;
+  roomNo: string;
+  status: 'Admitted' | 'Discharged';
+  notes: string;
+  createdAt: string;
 }

@@ -10,7 +10,7 @@ import {
   getBills, addBill,
   getHospitalSettings,
   addPatient, updatePatient,
-  todayStr, timeStr, genId,
+  todayStr, timeStr, genId, getNextTokenNo,
 } from '@/lib/store';
 import type { Patient, Visit, LabOrder, Prescription, XRayOrder, UltrasoundOrder, Bill, BillItem, HospitalSettings } from '@/lib/types';
 
@@ -48,13 +48,11 @@ interface BillModalData {
   prescriptions: Prescription[];
   xrayOrders: XRayOrder[];
   ultrasoundOrders: UltrasoundOrder[];
-  consultationFee: number;
   // Editable copies
   labTests: { testName: string; price: number; selected: boolean }[];
   medicines: { name: string; dosage: string; duration: string; frequency: string; instructions: string; price: number; selected: boolean }[];
   xrays: { id: string; xrayType: string; price: number; selected: boolean }[];
   ultrasounds: { id: string; usgType: string; price: number; selected: boolean }[];
-  consultationSelected: boolean;
 }
 
 /* ========== MAIN COMPONENT ========== */
@@ -183,25 +181,22 @@ export default function ReceptionPage() {
       prescriptions: vPrescriptions,
       xrayOrders: vXrayOrders,
       ultrasoundOrders: vUltrasoundOrders,
-      consultationFee: activeVisit.doctorFee,
       labTests,
       medicines: meds,
       xrays,
       ultrasounds,
-      consultationSelected: true,
     });
   };
 
   // ========= BILL CALCULATIONS =========
   const billCalculations = useMemo(() => {
     if (!billModal) return null;
-    const consultation = billModal.consultationSelected ? billModal.consultationFee : 0;
     const labTotal = billModal.labTests.filter(t => t.selected).reduce((s, t) => s + t.price, 0);
     const xrayTotal = billModal.xrays.filter(x => x.selected).reduce((s, x) => s + x.price, 0);
     const usgTotal = billModal.ultrasounds.filter(u => u.selected).reduce((s, u) => s + u.price, 0);
     const pharmacyTotal = billModal.medicines.filter(m => m.selected).reduce((s, m) => s + m.price, 0);
-    const grandTotal = consultation + labTotal + xrayTotal + usgTotal + pharmacyTotal;
-    return { consultation, labTotal, xrayTotal, usgTotal, pharmacyTotal, grandTotal };
+    const grandTotal = labTotal + xrayTotal + usgTotal + pharmacyTotal;
+    return { labTotal, xrayTotal, usgTotal, pharmacyTotal, grandTotal };
   }, [billModal]);
 
   // ========= RECEIVE PAYMENT & PRINT RECEIPT =========
@@ -212,12 +207,9 @@ export default function ReceptionPage() {
       return;
     }
 
-    const { consultation, labTotal, xrayTotal, usgTotal, pharmacyTotal, grandTotal } = billCalculations;
+    const { labTotal, xrayTotal, usgTotal, pharmacyTotal, grandTotal } = billCalculations;
     const items: BillItem[] = [];
 
-    if (billModal.consultationSelected) {
-      items.push({ description: `Consultation - ${billModal.visit.doctor} (${billModal.visit.department})`, amount: consultation, type: 'Consultation', selected: true, quantity: 1 });
-    }
     billModal.labTests.filter(t => t.selected).forEach(t => {
       items.push({ description: `Lab: ${t.testName}`, amount: t.price, type: 'Lab', selected: true, quantity: 1 });
     });
@@ -279,7 +271,6 @@ export default function ReceptionPage() {
         .items-table td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; }
         .items-table td:last-child { text-align: right; font-weight: 600; }
         .type-badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: 600; }
-        .type-consultation { background: #dbeafe; color: #1d4ed8; }
         .type-lab { background: #d1fae5; color: #065f46; }
         .type-xray { background: #fee2e2; color: #991b1b; }
         .type-ultrasound { background: #ede9fe; color: #5b21b6; }
@@ -352,14 +343,13 @@ export default function ReceptionPage() {
     const newCounter = patientCounter;
     const patientNo = `BAGA-${String(newCounter).padStart(4, '0')}`;
     const today = todayStr();
-    const expiry = new Date();
-    expiry.setFullYear(expiry.getFullYear() + 1);
     const doc = selectedDoctorData(form.doctor);
+    const tokenNo = getNextTokenNo();
 
     const newPatient: Patient = {
       id: genId(), patientNo, name: form.name.trim(), fatherName: form.fatherName.trim(),
       mobile: form.mobile.trim(), age: form.age.trim(), gender: form.gender,
-      address: form.address.trim(), cardStatus: 'Active', cardExpiry: expiry.toISOString().split('T')[0],
+      address: form.address.trim(), cardStatus: 'Active', cardExpiry: '',
       totalVisits: 0, lastVisit: today, regDate: today
     };
     addPatient(newPatient);
@@ -369,13 +359,14 @@ export default function ReceptionPage() {
     const newVisit: Visit = {
       id: genId(), patientId: newPatient.id, patientNo: newPatient.patientNo, patientName: newPatient.name,
       department: form.department, doctor: form.doctor, doctorFee: doc?.fee || 0,
+      tokenNo,
       date: today, time: timeStr(), status: 'Active', diagnosis: '', notes: '',
       vitals: { bp: '', pulse: '', temp: '', weight: '' }
     };
     addVisit(newVisit);
 
     setForm({ name: '', fatherName: '', mobile: '', age: '', gender: 'Male', address: '', department: '', doctor: '' });
-    handlePrintCard(newPatient, form.department, form.doctor, doc?.fee || 0);
+    handlePrintCard(newPatient, newVisit);
     refreshData();
     showToast(`Patient registered: ${patientNo}`, 'success');
   };
@@ -388,21 +379,24 @@ export default function ReceptionPage() {
 
     const today = todayStr();
     const doc = selectedDoctorData(visitDoctor);
+    const tokenNo = getNextTokenNo();
 
     const newVisit: Visit = {
       id: genId(), patientId: visitPatient.id, patientNo: visitPatient.patientNo, patientName: visitPatient.name,
       department: visitDept, doctor: visitDoctor, doctorFee: doc?.fee || 0,
+      tokenNo,
       date: today, time: timeStr(), status: 'Active', diagnosis: '', notes: '',
       vitals: { bp: '', pulse: '', temp: '', weight: '' }
     };
     addVisit(newVisit);
 
+    const updatedPatient = { ...visitPatient, totalVisits: visitPatient.totalVisits + 1, lastVisit: today };
     updatePatient(visitPatient.id, {
       totalVisits: visitPatient.totalVisits + 1,
       lastVisit: today,
     });
 
-    handlePrintCard({ ...visitPatient, totalVisits: visitPatient.totalVisits + 1, lastVisit: today }, visitDept, visitDoctor, doc?.fee || 0);
+    handlePrintCard(updatedPatient, newVisit);
     setVisitPatient(null);
     setVisitDept('');
     setVisitDoctor('');
@@ -410,56 +404,114 @@ export default function ReceptionPage() {
     showToast('New visit created successfully!', 'success');
   };
 
-  // ========= CARD RENEWAL =========
-  const handleRenewal = (patientId: string) => {
-    const expiry = new Date();
-    expiry.setFullYear(expiry.getFullYear() + 1);
-    updatePatient(patientId, {
-      cardStatus: 'Active',
-      cardExpiry: expiry.toISOString().split('T')[0],
-    });
-    refreshData();
-    showToast('Card renewed successfully!', 'success');
-  };
-
   // ========= PRINT CARD =========
-  const handlePrintCard = (patient: Patient, dept: string, doc: string, fee: number) => {
+  const handlePrintCard = (patient: Patient, visit: Visit | null) => {
+    const curr = settings?.currency || 'Rs.';
     const cardHtml = `
       <html><head><title>Patient Card - ${patient.patientNo}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; padding: 20px; }
-        .card { border: 3px solid #2563eb; border-radius: 12px; padding: 20px; max-width: 400px; margin: 0 auto; }
-        .header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 12px; }
-        .header h1 { color: #2563eb; font-size: 22px; }
-        .header p { color: #64748b; font-size: 12px; }
-        .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+        .page { max-width: 400px; margin: 0 auto; }
+
+        /* Card Circle - Patient Info */
+        .card {
+          border: 3px solid #2563eb;
+          border-radius: 20px;
+          padding: 24px 20px;
+          position: relative;
+        }
+        .card .header {
+          text-align: center;
+          border-bottom: 2px solid #2563eb;
+          padding-bottom: 10px;
+          margin-bottom: 14px;
+        }
+        .card .header h1 { color: #2563eb; font-size: 20px; }
+        .card .header p { color: #64748b; font-size: 11px; }
+        .row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+        .row:last-child { border-bottom: none; }
         .row .label { color: #64748b; font-weight: 600; }
-        .row .value { color: #1e293b; font-weight: 500; }
-        .highlight { background: #dbeafe; padding: 8px 12px; border-radius: 6px; margin-top: 10px; text-align: center; }
-        .highlight p { font-size: 13px; color: #1d4ed8; font-weight: 600; }
-        .footer { text-align: center; margin-top: 10px; font-size: 10px; color: #94a3b8; }
+        .row .value { color: #1e293b; font-weight: 500; text-align: right; }
+
+        /* Visit Info - Below Card */
+        .visit-slip {
+          margin-top: 12px;
+          border: 2px dashed #1e293b;
+          border-radius: 10px;
+          padding: 14px 18px;
+          background: #f8fafc;
+        }
+        .visit-slip .visit-header {
+          text-align: center;
+          font-size: 11px;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 8px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid #cbd5e1;
+        }
+        .visit-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 4px 16px;
+          font-size: 12px;
+        }
+        .visit-grid .vl { color: #64748b; }
+        .visit-grid .vv { color: #1e293b; font-weight: 600; }
+        .visit-grid .token-row {
+          grid-column: 1 / -1;
+          text-align: center;
+          background: #2563eb;
+          color: white;
+          padding: 6px;
+          border-radius: 6px;
+          font-size: 16px;
+          font-weight: 700;
+          margin-top: 6px;
+        }
+
+        .footer { text-align: center; margin-top: 10px; font-size: 9px; color: #94a3b8; }
         @media print { body { padding: 0; } }
       </style></head>
       <body>
-        <div class="card">
-          <div class="header">
-            <h1>BAGA Hospital</h1>
-            <p>Hospital Management System - Patient Card</p>
+        <div class="page">
+          <div class="card">
+            <div class="header">
+              <h1>BAGA Hospital</h1>
+              <p>Patient Card</p>
+            </div>
+            <div class="row"><span class="label">Patient No:</span><span class="value">${patient.patientNo}</span></div>
+            <div class="row"><span class="label">Name:</span><span class="value">${patient.name}</span></div>
+            <div class="row"><span class="label">Father/Husband:</span><span class="value">${patient.fatherName}</span></div>
+            <div class="row"><span class="label">Mobile:</span><span class="value">${patient.mobile}</span></div>
+            <div class="row"><span class="label">Age/Gender:</span><span class="value">${patient.age} / ${patient.gender}</span></div>
+            <div class="row"><span class="label">Address:</span><span class="value">${patient.address}</span></div>
           </div>
-          <div class="row"><span class="label">Patient No:</span><span class="value">${patient.patientNo}</span></div>
-          <div class="row"><span class="label">Name:</span><span class="value">${patient.name}</span></div>
-          <div class="row"><span class="label">Father/Husband:</span><span class="value">${patient.fatherName}</span></div>
-          <div class="row"><span class="label">Mobile:</span><span class="value">${patient.mobile}</span></div>
-          <div class="row"><span class="label">Age/Gender:</span><span class="value">${patient.age} / ${patient.gender}</span></div>
-          <div class="row"><span class="label">Address:</span><span class="value">${patient.address}</span></div>
-          <div class="row"><span class="label">Card Expiry:</span><span class="value">${patient.cardExpiry}</span></div>
-          <div class="highlight">
-            <p>Department: ${dept}</p>
-            <p>Doctor: ${doc}</p>
-            <p>Fee: Rs. ${fee.toLocaleString()}</p>
+
+          ${visit ? `
+          <div class="visit-slip">
+            <div class="visit-header">Current Visit Details</div>
+            <div class="visit-grid">
+              <div><span class="vl">Department:</span></div>
+              <div><span class="vv">${visit.department}</span></div>
+              <div><span class="vl">Doctor:</span></div>
+              <div><span class="vv">${visit.doctor}</span></div>
+              <div><span class="vl">Doctor Fee:</span></div>
+              <div><span class="vv">${curr} ${visit.doctorFee.toLocaleString()}</span></div>
+              <div><span class="vl">Token No:</span></div>
+              <div><span class="vv">${visit.tokenNo}</span></div>
+              <div><span class="vl">Time:</span></div>
+              <div><span class="vv">${visit.time}</span></div>
+              <div><span class="vl">Date:</span></div>
+              <div><span class="vv">${visit.date}</span></div>
+              <div class="token-row">TOKEN # ${visit.tokenNo}</div>
+            </div>
           </div>
-          <div class="footer">Registered: ${patient.regDate} | This visit allows consultation with one doctor only</div>
+          ` : ''}
+
+          <div class="footer">Registered: ${patient.regDate} | Total Visits: ${patient.totalVisits}</div>
         </div>
         <script>window.onload=function(){window.print();}</script>
       </body></html>
@@ -492,7 +544,7 @@ export default function ReceptionPage() {
               <h3 className="font-semibold">Patient Card</h3>
               <button onClick={() => setPrintContent(null)} className="btn btn-outline btn-sm">Close</button>
             </div>
-            <iframe srcDoc={printContent} style={{ width: '100%', height: '500px', border: 'none' }} title="Patient Card" />
+            <iframe srcDoc={printContent} style={{ width: '100%', height: '600px', border: 'none' }} title="Patient Card" />
           </div>
         </div>
       )}
@@ -535,7 +587,6 @@ export default function ReceptionPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-mono font-bold text-blue-600 text-lg">{p.patientNo}</span>
-                        <span className={`badge ${p.cardStatus === 'Active' ? 'badge-green' : 'badge-red'}`}>{p.cardStatus}</span>
                         {activeVisit && <span className="badge badge-blue">Active Visit</span>}
                         {existingBill && <span className="badge badge-green">Bill Paid</span>}
                       </div>
@@ -547,7 +598,7 @@ export default function ReceptionPage() {
                       {activeVisit && (
                         <div className="mt-3 space-y-2">
                           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                            <p className="text-sm font-semibold text-blue-800 mb-1">Current Visit - {activeVisit.date} {activeVisit.time}</p>
+                            <p className="text-sm font-semibold text-blue-800 mb-1">Current Visit - {activeVisit.date} {activeVisit.time} | Token: <strong>#{activeVisit.tokenNo}</strong></p>
                             <p className="text-xs text-blue-700">Department: <strong>{activeVisit.department}</strong> | Doctor: <strong>{activeVisit.doctor}</strong> | Fee: <strong>{curr} {activeVisit.doctorFee.toLocaleString()}</strong></p>
                             {activeVisit.diagnosis && <p className="text-xs text-blue-700 mt-1">Diagnosis: {activeVisit.diagnosis}</p>}
                           </div>
@@ -644,13 +695,12 @@ export default function ReceptionPage() {
                             </div>
                           )}
 
-                          {/* Grand Total */}
+                          {/* Grand Total (no consultation fee) */}
                           {(visitLabOrders.length > 0 || visitXray.length > 0 || visitUsg.length > 0 || visitPresc.length > 0) && (
                             <div className="bg-slate-800 rounded-lg p-3">
                               <div className="flex justify-between text-sm text-white font-bold">
                                 <span>GRAND TOTAL</span>
                                 <span>{curr} {(
-                                  activeVisit.doctorFee +
                                   visitLabOrders.reduce((s, lo) => s + lo.tests.reduce((ss, t) => ss + t.price, 0), 0) +
                                   visitXray.reduce((s, x) => s + x.price, 0) +
                                   visitUsg.reduce((s, u) => s + u.price, 0) +
@@ -677,13 +727,10 @@ export default function ReceptionPage() {
                           View Receipt
                         </button>
                       )}
-                      {!activeVisit && p.cardStatus === 'Active' && (
+                      {!activeVisit && (
                         <button onClick={() => { setVisitPatient(p); setVisitDept(''); setVisitDoctor(''); }} className="btn btn-success btn-sm whitespace-nowrap">New Visit</button>
                       )}
-                      {p.cardStatus === 'Expired' && (
-                        <button onClick={() => handleRenewal(p.id)} className="btn btn-sm whitespace-nowrap" style={{ background: '#d97706', color: 'white' }}>Renew Card</button>
-                      )}
-                      <button onClick={() => handlePrintCard(p, activeVisit?.department || '', activeVisit?.doctor || '', activeVisit?.doctorFee || 0)} className="btn btn-outline btn-sm whitespace-nowrap">Print Card</button>
+                      <button onClick={() => handlePrintCard(p, activeVisit || null)} className="btn btn-outline btn-sm whitespace-nowrap">Print Card</button>
                       <button onClick={() => setEditingPatient({ ...p })} className="btn btn-outline btn-sm whitespace-nowrap">Edit</button>
                     </div>
                   </div>
@@ -785,13 +832,14 @@ export default function ReceptionPage() {
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
-                <tr><th>Patient No</th><th>Name</th><th>Department</th><th>Doctor</th><th>Fee</th><th>Time</th><th>Status</th></tr>
+                <tr><th>Token</th><th>Patient No</th><th>Name</th><th>Department</th><th>Doctor</th><th>Fee</th><th>Time</th><th>Status</th></tr>
               </thead>
               <tbody>
                 {todayVisits.map(v => {
                   const hasBill = bills.find(b => b.visitId === v.id && b.status === 'Paid');
                   return (
                     <tr key={v.id}>
+                      <td className="font-bold text-blue-600 text-center bg-blue-50">#{v.tokenNo}</td>
                       <td className="font-mono font-bold text-blue-600">{v.patientNo}</td>
                       <td className="font-medium">{v.patientName}</td>
                       <td><span className="badge badge-purple">{v.department}</span></td>
@@ -819,7 +867,7 @@ export default function ReceptionPage() {
             <thead>
               <tr>
                 <th>Patient No</th><th>Name</th><th>Father Name</th><th>Mobile</th><th>Age/Gender</th>
-                <th>Department</th><th>Doctor</th><th>Visits</th><th>Card</th><th>Actions</th>
+                <th>Department</th><th>Doctor</th><th>Visits</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -836,7 +884,6 @@ export default function ReceptionPage() {
                     <td><span className="badge badge-purple">{activeVisit?.department || '-'}</span></td>
                     <td className="text-sm">{activeVisit?.doctor || '-'}</td>
                     <td className="text-center">{p.totalVisits}</td>
-                    <td><span className={`badge ${p.cardStatus === 'Active' ? 'badge-green' : 'badge-red'}`}>{p.cardStatus}</span></td>
                     <td>
                       <div className="flex gap-1 flex-wrap">
                         {activeVisit && !hasBill && (
@@ -845,14 +892,11 @@ export default function ReceptionPage() {
                         {activeVisit && hasBill && (
                           <button onClick={() => setReceiptBill(hasBill)} className="btn btn-success btn-sm">Receipt</button>
                         )}
-                        {!activeVisit && p.cardStatus === 'Active' && (
+                        {!activeVisit && (
                           <button onClick={() => { setVisitPatient(p); setVisitDept(''); setVisitDoctor(''); }} className="btn btn-success btn-sm">Visit</button>
                         )}
-                        <button onClick={() => handlePrintCard(p, activeVisit?.department || '', activeVisit?.doctor || '', activeVisit?.doctorFee || 0)} className="btn btn-outline btn-sm">Print</button>
+                        <button onClick={() => handlePrintCard(p, activeVisit || null)} className="btn btn-outline btn-sm">Print</button>
                         <button onClick={() => setEditingPatient({ ...p })} className="btn btn-outline btn-sm">Edit</button>
-                        {p.cardStatus === 'Expired' && (
-                          <button onClick={() => handleRenewal(p.id)} className="btn btn-sm" style={{ background: '#d97706', color: 'white' }}>Renew</button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -883,6 +927,7 @@ export default function ReceptionPage() {
               <div><span className="text-slate-500">Department:</span> <strong>{billModal.visit.department}</strong></div>
               <div><span className="text-slate-500">Doctor:</span> <strong>{billModal.visit.doctor}</strong></div>
               <div><span className="text-slate-500">Visit Date:</span> <strong>{billModal.visit.date} {billModal.visit.time}</strong></div>
+              <div><span className="text-slate-500">Token No:</span> <strong>#{billModal.visit.tokenNo}</strong></div>
               {billModal.visit.diagnosis && <div><span className="text-slate-500">Diagnosis:</span> <strong>{billModal.visit.diagnosis}</strong></div>}
             </div>
 
@@ -890,24 +935,13 @@ export default function ReceptionPage() {
               <strong>Instructions:</strong> Patient can ask to remove any test or medicine they do not want. Uncheck the items below to remove them from the bill. The total will adjust automatically.
             </p>
 
-            {/* Consultation Fee */}
-            <div className="border border-slate-200 rounded-lg mb-3">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-t-lg">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={billModal.consultationSelected}
-                    onChange={e => setBillModal({ ...billModal, consultationSelected: e.target.checked })}
-                    className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <div>
-                    <p className="font-semibold text-slate-800">Doctor Consultation Fee</p>
-                    <p className="text-xs text-slate-500">{billModal.visit.doctor} - {billModal.visit.department}</p>
-                  </div>
-                </label>
-                <span className="font-bold text-blue-700 text-lg">{curr} {billModal.consultationFee.toLocaleString()}</span>
+            {/* No items message */}
+            {billModal.labTests.length === 0 && billModal.xrays.length === 0 && billModal.ultrasounds.length === 0 && billModal.medicines.length === 0 && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 text-center mb-3">
+                <svg className="w-10 h-10 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                <p className="text-sm text-slate-500">No doctor orders yet. The doctor has not ordered any tests, x-rays, ultrasounds, or medicines for this visit.</p>
               </div>
-            </div>
+            )}
 
             {/* Lab Tests */}
             {billModal.labTests.length > 0 && (
@@ -1061,12 +1095,6 @@ export default function ReceptionPage() {
             {/* Total Section */}
             <div className="bg-slate-800 rounded-xl p-4 text-white">
               <div className="space-y-2">
-                {billModal.consultationSelected && (
-                  <div className="flex justify-between text-sm">
-                    <span>Consultation Fee</span>
-                    <span>{curr} {billCalculations.consultation.toLocaleString()}</span>
-                  </div>
-                )}
                 {billCalculations.labTotal > 0 && (
                   <div className="flex justify-between text-sm">
                     <span>Lab Tests</span>

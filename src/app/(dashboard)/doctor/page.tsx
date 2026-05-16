@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { searchPatients, getPatientByNo, getVisitsByPatient, getActiveVisitByPatient, addLabOrder, addPrescription, addXRayOrder, addUltrasoundOrder, updateVisit, updatePatient, getPrescriptionsByPatient, getLabOrdersByPatient, genId, todayStr, timeStr } from '@/lib/store';
-import type { Patient, Visit, LabOrder, Prescription } from '@/lib/types';
+import { searchPatients, getPatientByNo, getVisitsByPatient, getActiveVisitByPatient, addLabOrder, addPrescription, addXRayOrder, addUltrasoundOrder, updateVisit, updatePatient, getPrescriptionsByPatient, getLabOrdersByPatient, genId, todayStr, timeStr, addAdmission, getAdmissionsByPatient } from '@/lib/store';
+import type { Patient, Visit, LabOrder, Prescription, Admission } from '@/lib/types';
 
 const LAB_TESTS = ['CBC', 'Blood Sugar (Fasting)', 'Blood Sugar (Random)', 'Liver Function Test (LFT)', 'Kidney Function Test (KFT)', 'Urine Routine', 'Urine Culture', 'Thyroid Panel (T3,T4,TSH)', 'Lipid Profile', 'HbA1c', 'ESR', 'CRP', 'HIV', 'Hepatitis B', 'Hepatitis C', 'Dengue NS1', 'Electrolytes', 'Vitamin D', 'Iron Studies', 'Blood Group', 'PT/INR'];
 const MEDICINES_LIST = ['Paracetamol 500mg', 'Ibuprofen 400mg', 'Amoxicillin 250mg', 'Azithromycin 500mg', 'Omeprazole 20mg', 'Cetirizine 10mg', 'Metformin 500mg', 'Amlodipine 5mg', 'Ciprofloxacin 500mg', 'Diclofenac 50mg', 'Pantoprazole 40mg', 'Ranitidine 150mg', 'Domperidone 10mg', 'Antacid Syrup', 'ORS', 'Vitamin C 500mg', 'Multivitamin', 'Calcium + Vitamin D', 'Aspirin 75mg', 'Clopidogrel 75mg', 'Atorvastatin 10mg', 'Salbutamol Inhaler', 'Montelukast 10mg'];
@@ -23,6 +23,11 @@ export default function DoctorPage() {
   const [usgType, setUsgType] = useState('');
   const [pLabOrders, setPLabOrders] = useState<LabOrder[]>([]);
   const [pPrescriptions, setPPrescriptions] = useState<Prescription[]>([]);
+  const [admissions, setAdmissions] = useState<Admission[]>([]);
+  const [admissionPurpose, setAdmissionPurpose] = useState('');
+  const [admissionDate, setAdmissionDate] = useState('');
+  const [admissionRoom, setAdmissionRoom] = useState('');
+  const [admissionNotes, setAdmissionNotes] = useState('');
 
   const showToast = (msg:string,type:'success'|'error')=>{setToast({msg,type});setTimeout(()=>setToast(null),3000)};
 
@@ -38,11 +43,13 @@ export default function DoctorPage() {
     setSelectedPatient(p);setSearchResults([]);
     setDiagnosis('');setNotes('');setSelectedTests([]);setRxMeds([]);setRxNotes('');setXrayType('');setUsgType('');
     setVitals({bp:'',pulse:'',temp:'',weight:''});
+    setAdmissionPurpose('');setAdmissionDate('');setAdmissionRoom('');setAdmissionNotes('');
     const ev=getActiveVisitByPatient(p.id);
     if(ev){setActiveVisit(ev);setDiagnosis(ev.diagnosis||'');setNotes(ev.notes||'');setVitals(ev.vitals||{bp:'',pulse:'',temp:'',weight:''});}
-    else{const nv:Visit={id:genId(),patientId:p.id,patientNo:p.patientNo,patientName:p.name,department:'General',doctor:'Current Doctor',doctorFee:0,date:todayStr(),time:timeStr(),status:'Active',diagnosis:'',notes:'',vitals:{bp:'',pulse:'',temp:'',weight:''}};setActiveVisit(nv);}
+    else{const nv:Visit={id:genId(),patientId:p.id,patientNo:p.patientNo,patientName:p.name,department:'General',doctor:'Current Doctor',doctorFee:0,date:todayStr(),time:timeStr(),tokenNo:0,status:'Active',diagnosis:'',notes:'',vitals:{bp:'',pulse:'',temp:'',weight:''}};setActiveVisit(nv);}
     setPLabOrders(getLabOrdersByPatient(p.id));
     setPPrescriptions(getPrescriptionsByPatient(p.id));
+    setAdmissions(getAdmissionsByPatient(p.id));
     setTab('info');
   };
 
@@ -66,6 +73,19 @@ export default function DoctorPage() {
   const orderXR=()=>{if(!activeVisit||!xrayType){showToast('Select type','error');return}addXRayOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,xrayType,price:0,selected:true,orderedBy:'Current Doctor',date:todayStr(),status:'Pending'});setXrayType('');showToast('X-Ray ordered!','success')};
   const orderUSG=()=>{if(!activeVisit||!usgType){showToast('Select type','error');return}addUltrasoundOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,usgType,price:0,selected:true,orderedBy:'Current Doctor',date:todayStr(),status:'Pending'});setUsgType('');showToast('Ultrasound ordered!','success')};
 
+  const handleAdmission = () => {
+    if (!activeVisit || !selectedPatient || !admissionPurpose) { showToast('Fill all fields', 'error'); return; }
+    addAdmission({
+      id: genId(), patientId: selectedPatient.id, patientNo: selectedPatient.patientNo, patientName: selectedPatient.name,
+      department: activeVisit.department, doctor: activeVisit.doctor,
+      admissionDate: admissionDate || todayStr(), purpose: admissionPurpose, roomNo: admissionRoom,
+      status: 'Admitted', notes: admissionNotes, createdAt: todayStr()
+    });
+    setAdmissions(getAdmissionsByPatient(selectedPatient.id));
+    setAdmissionPurpose('');setAdmissionDate('');setAdmissionRoom('');setAdmissionNotes('');
+    showToast('Patient admitted!', 'success');
+  };
+
   const discharge=()=>{
     if(!activeVisit||!selectedPatient)return;
     if(!confirm(`Discharge ${selectedPatient.name}?`))return;
@@ -74,7 +94,7 @@ export default function DoctorPage() {
     setActiveVisit(null);setSelectedPatient(null);showToast('Patient discharged!','success');
   };
 
-  const tabs=[{key:'info',label:'Info'},{key:'vitals',label:'Vitals'},{key:'prescribe',label:'Prescription'},{key:'lab',label:'Lab Order'},{key:'xray',label:'X-Ray'},{key:'ultrasound',label:'USG'},{key:'notes',label:'Diagnosis'},{key:'reports',label:'Reports'},{key:'history',label:'History'}];
+  const tabs=[{key:'info',label:'Info'},{key:'vitals',label:'Vitals'},{key:'prescribe',label:'Medication'},{key:'lab',label:'Lab Order'},{key:'xray',label:'X-Ray'},{key:'ultrasound',label:'USG'},{key:'admission',label:'Admission'},{key:'notes',label:'Diagnosis'},{key:'reports',label:'Reports'},{key:'history',label:'History'}];
 
   return (
     <div className="space-y-5">
@@ -154,6 +174,33 @@ export default function DoctorPage() {
                 ))}
                 <div><label className="form-label">Notes</label><textarea className="form-input" rows={2} value={rxNotes} onChange={e=>setRxNotes(e.target.value)}/></div>
                 <button onClick={saveRx} className="btn btn-success btn-lg">Save Prescription</button>
+
+                {pPrescriptions.length > 0 && (
+                  <div className="mt-6 border-t pt-4">
+                    <h4 className="font-semibold text-sm mb-2">Previous Prescriptions / Medications</h4>
+                    {pPrescriptions.map(rx => (
+                      <div key={rx.id} className="border border-slate-200 rounded-lg p-3 mb-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-slate-500">{rx.date} {rx.time} - {rx.prescribedBy}</span>
+                          <span className={`badge ${rx.status === 'Active' ? 'badge-blue' : 'badge-green'}`}>{rx.status}</span>
+                        </div>
+                        <table className="data-table mt-2">
+                          <thead><tr><th>Medicine</th><th>Dosage</th><th>Duration</th><th>Frequency</th></tr></thead>
+                          <tbody>
+                            {rx.medicines.map((m, i) => (
+                              <tr key={i}>
+                                <td className="font-medium">{m.name}</td>
+                                <td>{m.dosage}</td>
+                                <td>{m.duration}</td>
+                                <td>{m.frequency}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -186,6 +233,35 @@ export default function DoctorPage() {
                   {['Abdominal USG','Pelvic USG','Obstetric USG','Thyroid USG','Breast USG','Renal USG','Prostate USG','Doppler Study'].map(u=>(<button key={u} onClick={()=>setUsgType(u)} className={`p-2 rounded-lg border text-sm transition-colors ${usgType===u?'border-purple-500 bg-purple-50 text-purple-700 font-medium':'border-slate-200 hover:border-slate-300 text-slate-600'}`}>{usgType===u&&<span className="mr-1">&#10003;</span>}{u}</button>))}
                 </div>
                 <button onClick={orderUSG} className="btn btn-success btn-lg" disabled={!usgType}>Order Ultrasound</button>
+              </div>
+            )}
+
+            {tab==='admission'&&(
+              <div className="space-y-4">
+                <h3 className="font-semibold">Admit Patient</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div><label className="form-label">Purpose</label><select className="form-input" value={admissionPurpose} onChange={e=>setAdmissionPurpose(e.target.value)}><option value="">-- Select --</option><option>Surgery</option><option>Checkup</option><option>Delivery</option><option>Emergency</option><option>Observation</option><option>Other</option></select></div>
+                  <div><label className="form-label">Admission Date</label><input className="form-input" type="date" value={admissionDate} onChange={e=>setAdmissionDate(e.target.value)}/></div>
+                  <div><label className="form-label">Room Number</label><input className="form-input" placeholder="e.g. 101" value={admissionRoom} onChange={e=>setAdmissionRoom(e.target.value)}/></div>
+                </div>
+                <div><label className="form-label">Notes</label><textarea className="form-input" rows={2} value={admissionNotes} onChange={e=>setAdmissionNotes(e.target.value)} placeholder="Additional notes..."/></div>
+                <button onClick={handleAdmission} className="btn btn-success btn-lg">Admit Patient</button>
+
+                {admissions.length > 0 && (
+                  <div className="mt-6 border-t pt-4">
+                    <h4 className="font-semibold text-sm mb-2">Active Admissions</h4>
+                    {admissions.filter(a => a.status === 'Admitted').map(a => (
+                      <div key={a.id} className="border border-slate-200 rounded-lg p-3 mb-2">
+                        <div className="flex justify-between">
+                          <span className="font-medium">{a.purpose}</span>
+                          <span className={`badge ${a.status === 'Admitted' ? 'badge-blue' : 'badge-green'}`}>{a.status}</span>
+                        </div>
+                        <div className="text-sm text-slate-500 mt-1">Date: {a.admissionDate} | Room: {a.roomNo || '-'} | Dept: {a.department}</div>
+                        {a.notes && <div className="text-sm text-slate-500 mt-1">Notes: {a.notes}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
