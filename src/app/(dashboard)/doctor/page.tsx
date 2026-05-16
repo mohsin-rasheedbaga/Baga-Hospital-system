@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { searchPatients, getPatientByNo, getVisitsByPatient, getActiveVisitByPatient, addLabOrder, addPrescriptionItem, addXRayOrder, addUltrasoundOrder, updateVisit, updatePatient, getPrescriptionsByPatient, getLabOrdersByPatient, genId, todayStr, timeStr } from '@/lib/store';
+import { searchPatients, getPatientByNo, getVisitsByPatient, getActiveVisitByPatient, addLabOrder, addPrescription, addXRayOrder, addUltrasoundOrder, updateVisit, updatePatient, getPrescriptionsByPatient, getLabOrdersByPatient, genId, todayStr, timeStr } from '@/lib/store';
 import type { Patient, Visit, LabOrder, Prescription } from '@/lib/types';
 
 const LAB_TESTS = ['CBC', 'Blood Sugar (Fasting)', 'Blood Sugar (Random)', 'Liver Function Test (LFT)', 'Kidney Function Test (KFT)', 'Urine Routine', 'Urine Culture', 'Thyroid Panel (T3,T4,TSH)', 'Lipid Profile', 'HbA1c', 'ESR', 'CRP', 'HIV', 'Hepatitis B', 'Hepatitis C', 'Dengue NS1', 'Electrolytes', 'Vitamin D', 'Iron Studies', 'Blood Group', 'PT/INR'];
@@ -17,7 +17,7 @@ export default function DoctorPage() {
   const [diagnosis, setDiagnosis] = useState('');
   const [notes, setNotes] = useState('');
   const [selectedTests, setSelectedTests] = useState<string[]>([]);
-  const [rxMeds, setRxMeds] = useState<{name:string;dosage:string;duration:string;frequency:string;instructions:string}[]>([]);
+  const [rxMeds, setRxMeds] = useState<{name:string;dosage:string;duration:string;frequency:string;instructions:string;price:number;selected:boolean}[]>([]);
   const [rxNotes, setRxNotes] = useState('');
   const [xrayType, setXrayType] = useState('');
   const [usgType, setUsgType] = useState('');
@@ -51,20 +51,20 @@ export default function DoctorPage() {
 
   const orderLabTests=()=>{
     if(!activeVisit||selectedTests.length===0){showToast('Select tests','error');return}
-    addLabOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,testNames:selectedTests,orderedBy:'Current Doctor',date:todayStr(),time:timeStr(),status:'Pending',results:[]});
+    addLabOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,tests:selectedTests.map(t=>({testName:t,price:0,selected:true})),orderedBy:'Current Doctor',date:todayStr(),time:timeStr(),status:'Pending',results:[]});
     setSelectedTests([]);setPLabOrders(getLabOrdersByPatient(selectedPatient!.id));
     showToast(`${selectedTests.length} test(s) ordered!`,'success');
   };
 
   const saveRx=()=>{
     if(!activeVisit||rxMeds.length===0){showToast('Add medicines','error');return}
-    addPrescriptionItem({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,medicines:rxMeds,prescribedBy:'Current Doctor',date:todayStr(),time:timeStr(),status:'Active',notes:rxNotes});
+    addPrescription({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,medicines:rxMeds,prescribedBy:'Current Doctor',date:todayStr(),time:timeStr(),status:'Active',notes:rxNotes});
     setRxMeds([]);setRxNotes('');setPPrescriptions(getPrescriptionsByPatient(selectedPatient!.id));
     showToast('Prescription saved!','success');
   };
 
-  const orderXR=()=>{if(!activeVisit||!xrayType){showToast('Select type','error');return}addXRayOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,xrayType,orderedBy:'Current Doctor',date:todayStr(),status:'Pending'});setXrayType('');showToast('X-Ray ordered!','success')};
-  const orderUSG=()=>{if(!activeVisit||!usgType){showToast('Select type','error');return}addUltrasoundOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,usgType,orderedBy:'Current Doctor',date:todayStr(),status:'Pending'});setUsgType('');showToast('Ultrasound ordered!','success')};
+  const orderXR=()=>{if(!activeVisit||!xrayType){showToast('Select type','error');return}addXRayOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,xrayType,price:0,selected:true,orderedBy:'Current Doctor',date:todayStr(),status:'Pending'});setXrayType('');showToast('X-Ray ordered!','success')};
+  const orderUSG=()=>{if(!activeVisit||!usgType){showToast('Select type','error');return}addUltrasoundOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,usgType,price:0,selected:true,orderedBy:'Current Doctor',date:todayStr(),status:'Pending'});setUsgType('');showToast('Ultrasound ordered!','success')};
 
   const discharge=()=>{
     if(!activeVisit||!selectedPatient)return;
@@ -138,7 +138,7 @@ export default function DoctorPage() {
 
             {tab==='prescribe'&&(
               <div className="space-y-4">
-                <div className="flex justify-between items-center"><h3 className="font-semibold">Prescribe Medicines</h3><button onClick={()=>setRxMeds([...rxMeds,{name:'',dosage:'',duration:'',frequency:'3 times daily',instructions:''}])} className="btn btn-primary btn-sm">+ Add Medicine</button></div>
+                <div className="flex justify-between items-center"><h3 className="font-semibold">Prescribe Medicines</h3><button onClick={()=>setRxMeds([...rxMeds,{name:'',dosage:'',duration:'',frequency:'3 times daily',instructions:'',price:0,selected:true}])} className="btn btn-primary btn-sm">+ Add Medicine</button></div>
                 {rxMeds.length===0&&<p className="text-slate-400 text-center py-4">No medicines added</p>}
                 {rxMeds.map((med,idx)=>(
                   <div key={idx} className="border border-slate-200 rounded-lg p-4">
@@ -165,7 +165,7 @@ export default function DoctorPage() {
                 </div>
                 {selectedTests.length>0&&<p className="text-sm text-purple-600 font-medium">{selectedTests.length} test(s) selected</p>}
                 <button onClick={orderLabTests} className="btn btn-success btn-lg" disabled={selectedTests.length===0}>Order Lab Tests</button>
-                {pLabOrders.length>0&&<div className="mt-4 border-t pt-4"><h4 className="font-semibold text-sm mb-2">Previous Orders</h4>{pLabOrders.map(o=>(<div key={o.id} className="border border-slate-200 rounded-lg p-3 mb-2"><div className="flex justify-between"><span className="text-sm text-slate-500">{o.date} {o.time}</span><span className={`badge ${o.status==='Completed'?'badge-green':'badge-amber'}`}>{o.status}</span></div><div className="flex flex-wrap gap-1 mt-1">{o.testNames.map((t,i)=><span key={i} className="badge badge-blue">{t}</span>)}</div></div>))}</div>}
+                {pLabOrders.length>0&&<div className="mt-4 border-t pt-4"><h4 className="font-semibold text-sm mb-2">Previous Orders</h4>{pLabOrders.map(o=>(<div key={o.id} className="border border-slate-200 rounded-lg p-3 mb-2"><div className="flex justify-between"><span className="text-sm text-slate-500">{o.date} {o.time}</span><span className={`badge ${o.status==='Completed'?'badge-green':'badge-amber'}`}>{o.status}</span></div><div className="flex flex-wrap gap-1 mt-1">{o.tests.map((t,i)=><span key={i} className="badge badge-blue">{t.testName}</span>)}</div></div>))}</div>}
               </div>
             )}
 
@@ -201,7 +201,7 @@ export default function DoctorPage() {
               <div className="space-y-4">
                 <h3 className="font-semibold">Lab Reports</h3>
                 {pLabOrders.length===0&&<p className="text-slate-400 text-center py-4">No reports yet</p>}
-                {pLabOrders.map(o=>(<div key={o.id} className="border border-slate-200 rounded-lg p-4 mb-2"><div className="flex justify-between"><span className="text-sm text-slate-500">{o.date}</span><span className={`badge ${o.status==='Completed'?'badge-green':'badge-amber'}`}>{o.status}</span></div><div className="flex flex-wrap gap-1 mt-1">{o.testNames.map((t,i)=><span key={i} className="badge badge-blue">{t}</span>)}</div></div>))}
+                {pLabOrders.map(o=>(<div key={o.id} className="border border-slate-200 rounded-lg p-4 mb-2"><div className="flex justify-between"><span className="text-sm text-slate-500">{o.date}</span><span className={`badge ${o.status==='Completed'?'badge-green':'badge-amber'}`}>{o.status}</span></div><div className="flex flex-wrap gap-1 mt-1">{o.tests.map((t,i)=><span key={i} className="badge badge-blue">{t.testName}</span>)}</div></div>))}
                 <h3 className="font-semibold mt-6">Prescriptions</h3>
                 {pPrescriptions.length===0&&<p className="text-slate-400 text-center py-4">No prescriptions yet</p>}
                 {pPrescriptions.map(rx=>(<div key={rx.id} className="border border-slate-200 rounded-lg p-4 mb-2"><div className="flex justify-between"><span className="text-sm text-slate-500">{rx.date} {rx.time}</span><span className={`badge ${rx.status==='Active'?'badge-blue':'badge-green'}`}>{rx.status}</span></div><table className="data-table mt-2"><thead><tr><th>Medicine</th><th>Dosage</th><th>Duration</th><th>Frequency</th></tr></thead><tbody>{rx.medicines.map((m,i)=><tr key={i}><td className="font-medium">{m.name}</td><td>{m.dosage}</td><td>{m.duration}</td><td>{m.frequency}</td></tr>)}</tbody></table></div>))}

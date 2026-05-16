@@ -8,6 +8,15 @@ export interface Hospital {
   licenseNo: string;
 }
 
+export interface HospitalSettings {
+  receptionCanCollectPharmacy: boolean;
+  receptionCanCollectLab: boolean;
+  receptionCanCollectXray: boolean;
+  receptionCanCollectUltrasound: boolean;
+  currency: string;
+  receiptFooter: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -57,12 +66,18 @@ export interface LabOrder {
   patientId: string;
   patientNo: string;
   patientName: string;
-  testNames: string[];
-  orderedBy: string; // doctor name
+  tests: LabTest[];
+  orderedBy: string;
   date: string;
   time: string;
   status: 'Pending' | 'In Progress' | 'Completed';
   results: LabResult[];
+}
+
+export interface LabTest {
+  testName: string;
+  price: number;
+  selected: boolean;
 }
 
 export interface LabResult {
@@ -93,6 +108,8 @@ export interface PrescriptionMedicine {
   duration: string;
   frequency: string;
   instructions: string;
+  price: number;
+  selected: boolean;
 }
 
 export interface DispenseRecord {
@@ -111,18 +128,23 @@ export interface Bill {
   patientId: string;
   patientNo: string;
   patientName: string;
+  visitId: string;
   items: BillItem[];
   totalAmount: number;
   paidAmount: number;
   status: 'Paid' | 'Partial' | 'Unpaid';
   paymentMethod: 'Cash' | 'Card' | 'Pending';
   date: string;
+  time: string;
+  receivedBy: string;
 }
 
 export interface BillItem {
   description: string;
   amount: number;
-  type: 'Consultation' | 'Lab' | 'X-Ray' | 'Ultrasound' | 'Pharmacy' | 'Surgery';
+  type: 'Consultation' | 'Lab' | 'X-Ray' | 'Ultrasound' | 'Pharmacy' | 'Card' | 'Renewal';
+  selected: boolean;
+  quantity: number;
 }
 
 export interface XRayOrder {
@@ -132,6 +154,8 @@ export interface XRayOrder {
   patientNo: string;
   patientName: string;
   xrayType: string;
+  price: number;
+  selected: boolean;
   orderedBy: string;
   date: string;
   status: 'Pending' | 'In Progress' | 'Completed';
@@ -145,6 +169,8 @@ export interface UltrasoundOrder {
   patientNo: string;
   patientName: string;
   usgType: string;
+  price: number;
+  selected: boolean;
   orderedBy: string;
   date: string;
   status: 'Pending' | 'In Progress' | 'Completed';

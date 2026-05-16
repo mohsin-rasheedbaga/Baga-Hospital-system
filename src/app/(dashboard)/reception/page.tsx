@@ -1,41 +1,22 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  getPatients, setPatients, getPatientCounter, setPatientCounter,
+  getVisits, setVisits, addVisit,
+  getLabOrders, getLabOrdersByVisit,
+  getPrescriptions, getPrescriptionsByVisit,
+  getXRayOrders, getXRayOrdersByVisit,
+  getUltrasoundOrders, getUltrasoundOrdersByVisit,
+  getBills, addBill,
+  getHospitalSettings,
+  addPatient, updatePatient,
+  todayStr, timeStr, genId,
+} from '@/lib/store';
+import type { Patient, Visit, LabOrder, Prescription, XRayOrder, UltrasoundOrder, Bill, BillItem, HospitalSettings } from '@/lib/types';
 
-/* ========== DATA ========== */
+/* ========== DOCTORS DATA ========== */
 interface Doctor {
   id: string; name: string; dept: string; fee: number; timing: string;
-}
-
-interface Patient {
-  id: string;
-  patientNo: string;
-  name: string;
-  fatherName: string;
-  mobile: string;
-  age: string;
-  gender: string;
-  address: string;
-  department: string;
-  doctor: string;
-  cardStatus: string;
-  cardExpiry: string;
-  totalVisits: number;
-  lastVisit: string;
-  lastDept: string;
-  lastDoctor: string;
-  visitUsed: boolean;
-  regDate: string;
-}
-
-interface VisitRecord {
-  id: string;
-  patientNo: string;
-  patientName: string;
-  department: string;
-  doctor: string;
-  doctorFee: number;
-  date: string;
-  time: string;
 }
 
 const DEPARTMENTS = [
@@ -59,22 +40,39 @@ const DOCTORS: Doctor[] = [
   { id: 'd12', name: 'Dr. Rizwan Ahmad', dept: 'Surgery', fee: 5000, timing: 'By Appointment' },
 ];
 
-const initialPatients: Patient[] = [
-  { id: 'p1', patientNo: 'BAGA-0001', name: 'Muhammad Ali', fatherName: 'Abdul Rehman', mobile: '03001234567', age: '35', gender: 'Male', address: 'Street 5, Lahore', department: 'Cardiology', doctor: 'Dr. Muhammad Ali', cardStatus: 'Active', cardExpiry: '2026-05-15', totalVisits: 5, lastVisit: '2025-05-10', lastDept: 'Cardiology', lastDoctor: 'Dr. Muhammad Ali', visitUsed: true, regDate: '2025-01-15' },
-  { id: 'p2', patientNo: 'BAGA-0002', name: 'Fatima Bibi', fatherName: 'Haji Rasool', mobile: '03119876543', age: '28', gender: 'Female', address: 'Block C, Karachi', department: 'Gynecology', doctor: 'Dr. Sara Khan', cardStatus: 'Active', cardExpiry: '2026-02-20', totalVisits: 3, lastVisit: '2025-05-08', lastDept: 'Gynecology', lastDoctor: 'Dr. Sara Khan', visitUsed: false, regDate: '2025-02-20' },
-  { id: 'p3', patientNo: 'BAGA-0003', name: 'Ahmed Khan', fatherName: 'Ghulam Khan', mobile: '03234567890', age: '45', gender: 'Male', address: 'Mohalla Shah, Multan', department: 'Orthopedic', doctor: 'Dr. Bilal Siddiqui', cardStatus: 'Expired', cardExpiry: '2025-04-15', totalVisits: 8, lastVisit: '2025-04-10', lastDept: 'Orthopedic', lastDoctor: 'Dr. Bilal Siddiqui', visitUsed: true, regDate: '2024-12-05' },
-];
+/* ========== BILL MODAL DATA ========== */
+interface BillModalData {
+  patient: Patient;
+  visit: Visit;
+  labOrders: LabOrder[];
+  prescriptions: Prescription[];
+  xrayOrders: XRayOrder[];
+  ultrasoundOrders: UltrasoundOrder[];
+  consultationFee: number;
+  // Editable copies
+  labTests: { testName: string; price: number; selected: boolean }[];
+  medicines: { name: string; dosage: string; duration: string; frequency: string; instructions: string; price: number; selected: boolean }[];
+  xrays: { id: string; xrayType: string; price: number; selected: boolean }[];
+  ultrasounds: { id: string; usgType: string; price: number; selected: boolean }[];
+  consultationSelected: boolean;
+}
 
-let patientCounter = 4;
-
-/* ========== COMPONENT ========== */
+/* ========== MAIN COMPONENT ========== */
 export default function ReceptionPage() {
-  const [patients, setPatients] = useState<Patient[]>(initialPatients);
-  const [visits, setVisits] = useState<VisitRecord[]>([]);
+  // Data from store
+  const [patients, setPatientsState] = useState<Patient[]>([]);
+  const [visits, setVisitsState] = useState<Visit[]>([]);
+  const [labOrders, setLabOrdersState] = useState<LabOrder[]>([]);
+  const [prescriptions, setPrescriptionsState] = useState<Prescription[]>([]);
+  const [xrayOrders, setXrayOrdersState] = useState<XRayOrder[]>([]);
+  const [ultrasoundOrders, setUltrasoundOrdersState] = useState<UltrasoundOrder[]>([]);
+  const [bills, setBillsState] = useState<Bill[]>([]);
+  const [settings, setSettings] = useState<HospitalSettings | null>(null);
+  const [patientCounter, setPatientCounterState] = useState(4);
+
+  // UI State
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [printContent, setPrintContent] = useState<string | null>(null);
-
-  // Search
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Patient[]>([]);
   const [searched, setSearched] = useState(false);
@@ -93,8 +91,28 @@ export default function ReceptionPage() {
   // Edit modal
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
 
-  // View patient details
-  const [viewPatient, setViewPatient] = useState<Patient | null>(null);
+  // Bill modal
+  const [billModal, setBillModal] = useState<BillModalData | null>(null);
+
+  // Receipt modal
+  const [receiptBill, setReceiptBill] = useState<Bill | null>(null);
+
+  // Load data
+  useEffect(() => {
+    refreshData();
+  }, []);
+
+  const refreshData = () => {
+    setPatientsState(getPatients());
+    setVisitsState(getVisits());
+    setLabOrdersState(getLabOrders());
+    setPrescriptionsState(getPrescriptions());
+    setXrayOrdersState(getXRayOrders());
+    setUltrasoundOrdersState(getUltrasoundOrders());
+    setBillsState(getBills());
+    setSettings(getHospitalSettings());
+    setPatientCounterState(getPatientCounter());
+  };
 
   const showToast = (msg: string, type: 'success' | 'error') => {
     setToast({ msg, type });
@@ -106,13 +124,221 @@ export default function ReceptionPage() {
 
   // ========= SEARCH =========
   const handleSearch = () => {
-    if (!searchQuery.trim()) { showToast('Enter mobile number or card number', 'error'); return; }
+    if (!searchQuery.trim()) { showToast('Enter mobile number, card number or name', 'error'); return; }
     const q = searchQuery.trim().toLowerCase();
     const results = patients.filter(p =>
       p.mobile.includes(q) || p.patientNo.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
     );
     setSearchResults(results);
     setSearched(true);
+  };
+
+  // ========= GET ACTIVE VISIT =========
+  const getActiveVisit = (patientId: string): Visit | undefined => {
+    return visits.find(v => v.patientId === patientId && v.status === 'Active');
+  };
+
+  // ========= OPEN BILL MODAL =========
+  const handleOpenBill = (patient: Patient) => {
+    const activeVisit = getActiveVisit(patient.id);
+    if (!activeVisit) {
+      showToast('No active visit found for this patient', 'error');
+      return;
+    }
+
+    const vLabOrders = getLabOrdersByVisit(activeVisit.id);
+    const vPrescriptions = getPrescriptionsByVisit(activeVisit.id);
+    const vXrayOrders = getXRayOrdersByVisit(activeVisit.id);
+    const vUltrasoundOrders = getUltrasoundOrdersByVisit(activeVisit.id);
+
+    // Check if already paid
+    const existingBill = bills.find(b => b.visitId === activeVisit.id && b.status === 'Paid');
+    if (existingBill) {
+      showToast('Bill already paid for this visit. Receipt #' + existingBill.id.toUpperCase(), 'error');
+      return;
+    }
+
+    // Build editable copies
+    let labTests: { testName: string; price: number; selected: boolean }[] = [];
+    vLabOrders.forEach(lo => {
+      lo.tests.forEach(t => {
+        labTests.push({ testName: t.testName, price: t.price, selected: t.selected });
+      });
+    });
+
+    let meds: { name: string; dosage: string; duration: string; frequency: string; instructions: string; price: number; selected: boolean }[] = [];
+    vPrescriptions.forEach(pr => {
+      pr.medicines.forEach(m => {
+        meds.push({ name: m.name, dosage: m.dosage, duration: m.duration, frequency: m.frequency, instructions: m.instructions, price: m.price, selected: m.selected });
+      });
+    });
+
+    let xrays = vXrayOrders.map(x => ({ id: x.id, xrayType: x.xrayType, price: x.price, selected: x.selected }));
+    let ultrasounds = vUltrasoundOrders.map(u => ({ id: u.id, usgType: u.usgType, price: u.price, selected: u.selected }));
+
+    setBillModal({
+      patient,
+      visit: activeVisit,
+      labOrders: vLabOrders,
+      prescriptions: vPrescriptions,
+      xrayOrders: vXrayOrders,
+      ultrasoundOrders: vUltrasoundOrders,
+      consultationFee: activeVisit.doctorFee,
+      labTests,
+      medicines: meds,
+      xrays,
+      ultrasounds,
+      consultationSelected: true,
+    });
+  };
+
+  // ========= BILL CALCULATIONS =========
+  const billCalculations = useMemo(() => {
+    if (!billModal) return null;
+    const consultation = billModal.consultationSelected ? billModal.consultationFee : 0;
+    const labTotal = billModal.labTests.filter(t => t.selected).reduce((s, t) => s + t.price, 0);
+    const xrayTotal = billModal.xrays.filter(x => x.selected).reduce((s, x) => s + x.price, 0);
+    const usgTotal = billModal.ultrasounds.filter(u => u.selected).reduce((s, u) => s + u.price, 0);
+    const pharmacyTotal = billModal.medicines.filter(m => m.selected).reduce((s, m) => s + m.price, 0);
+    const grandTotal = consultation + labTotal + xrayTotal + usgTotal + pharmacyTotal;
+    return { consultation, labTotal, xrayTotal, usgTotal, pharmacyTotal, grandTotal };
+  }, [billModal]);
+
+  // ========= RECEIVE PAYMENT & PRINT RECEIPT =========
+  const handleReceivePayment = () => {
+    if (!billModal || !billCalculations) return;
+    if (billCalculations.grandTotal === 0) {
+      showToast('No items selected for billing', 'error');
+      return;
+    }
+
+    const { consultation, labTotal, xrayTotal, usgTotal, pharmacyTotal, grandTotal } = billCalculations;
+    const items: BillItem[] = [];
+
+    if (billModal.consultationSelected) {
+      items.push({ description: `Consultation - ${billModal.visit.doctor} (${billModal.visit.department})`, amount: consultation, type: 'Consultation', selected: true, quantity: 1 });
+    }
+    billModal.labTests.filter(t => t.selected).forEach(t => {
+      items.push({ description: `Lab: ${t.testName}`, amount: t.price, type: 'Lab', selected: true, quantity: 1 });
+    });
+    billModal.xrays.filter(x => x.selected).forEach(x => {
+      items.push({ description: `X-Ray: ${x.xrayType}`, amount: x.price, type: 'X-Ray', selected: true, quantity: 1 });
+    });
+    billModal.ultrasounds.filter(u => u.selected).forEach(u => {
+      items.push({ description: `Ultrasound: ${u.usgType}`, amount: u.price, type: 'Ultrasound', selected: true, quantity: 1 });
+    });
+    if (settings?.receptionCanCollectPharmacy !== false) {
+      billModal.medicines.filter(m => m.selected).forEach(m => {
+        items.push({ description: `Medicine: ${m.name} (${m.dosage}, ${m.duration})`, amount: m.price, type: 'Pharmacy', selected: true, quantity: 1 });
+      });
+    }
+
+    const bill: Bill = {
+      id: genId(),
+      patientId: billModal.patient.id,
+      patientNo: billModal.patient.patientNo,
+      patientName: billModal.patient.name,
+      visitId: billModal.visit.id,
+      items,
+      totalAmount: grandTotal,
+      paidAmount: grandTotal,
+      status: 'Paid',
+      paymentMethod: 'Cash',
+      date: todayStr(),
+      time: timeStr(),
+      receivedBy: 'Reception',
+    };
+
+    addBill(bill);
+    setReceiptBill(bill);
+    setBillModal(null);
+    refreshData();
+    showToast(`Payment received: ${settings?.currency || 'Rs.'} ${grandTotal.toLocaleString()}`, 'success');
+  };
+
+  // ========= GENERATE RECEIPT HTML =========
+  const getReceiptHtml = (bill: Bill): string => {
+    const curr = settings?.currency || 'Rs.';
+    const hospital = JSON.parse(localStorage.getItem('baga_hospital') || '{}');
+    const footer = settings?.receiptFooter || 'Thank you for choosing BAGA Hospital. Get well soon!';
+    return `
+      <html><head><title>Receipt - ${bill.patientNo}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .receipt { border: 2px solid #333; border-radius: 8px; padding: 24px; max-width: 400px; margin: 0 auto; }
+        .header { text-align: center; border-bottom: 2px dashed #333; padding-bottom: 12px; margin-bottom: 12px; }
+        .header h1 { color: #1e293b; font-size: 20px; }
+        .header p { color: #64748b; font-size: 11px; margin-top: 2px; }
+        .receipt-title { text-align: center; font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 8px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+        .info-grid .label { color: #64748b; }
+        .info-grid .value { color: #1e293b; font-weight: 500; }
+        .items-table { width: 100%; font-size: 11px; border-collapse: collapse; margin-bottom: 12px; }
+        .items-table th { background: #f1f5f9; padding: 6px 8px; text-align: left; font-weight: 600; color: #475569; border-bottom: 1px solid #cbd5e1; }
+        .items-table td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; }
+        .items-table td:last-child { text-align: right; font-weight: 600; }
+        .type-badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: 600; }
+        .type-consultation { background: #dbeafe; color: #1d4ed8; }
+        .type-lab { background: #d1fae5; color: #065f46; }
+        .type-xray { background: #fee2e2; color: #991b1b; }
+        .type-ultrasound { background: #ede9fe; color: #5b21b6; }
+        .type-pharmacy { background: #fef3c7; color: #92400e; }
+        .total-section { border-top: 2px solid #333; padding-top: 10px; margin-top: 8px; }
+        .total-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+        .total-row.grand { font-size: 18px; font-weight: 700; color: #1e293b; }
+        .footer { text-align: center; margin-top: 16px; padding-top: 12px; border-top: 2px dashed #333; }
+        .footer p { font-size: 10px; color: #64748b; }
+        .footer .thank { font-size: 12px; color: #1e293b; font-weight: 600; margin-top: 4px; }
+        @media print { body { padding: 0; } }
+      </style></head>
+      <body>
+        <div class="receipt">
+          <div class="header">
+            <h1>${hospital.name || 'BAGA Hospital'}</h1>
+            <p>${hospital.address || 'Main Road, City'} | ${hospital.phone || ''}</p>
+            <p>License: ${hospital.licenseNo || 'BAGA-LIC-0001'}</p>
+          </div>
+          <div class="receipt-title">PAYMENT RECEIPT</div>
+          <div class="info-grid">
+            <div><span class="label">Receipt #:</span><br/><span class="value">${bill.id.toUpperCase()}</span></div>
+            <div><span class="label">Date:</span><br/><span class="value">${bill.date} ${bill.time}</span></div>
+            <div><span class="label">Patient:</span><br/><span class="value">${bill.patientName}</span></div>
+            <div><span class="label">Patient No:</span><br/><span class="value">${bill.patientNo}</span></div>
+          </div>
+          <table class="items-table">
+            <thead><tr><th>#</th><th>Description</th><th>Amount</th></tr></thead>
+            <tbody>
+              ${bill.items.map((item, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>
+                    ${item.description}
+                    <span class="type-badge type-${item.type.toLowerCase()}">${item.type}</span>
+                  </td>
+                  <td>${curr} ${item.amount.toLocaleString()}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="total-section">
+            <div class="total-row grand">
+              <span>TOTAL PAID</span>
+              <span>${curr} ${bill.totalAmount.toLocaleString()}</span>
+            </div>
+            <div class="total-row" style="margin-top:4px;">
+              <span>Payment Method:</span>
+              <span>${bill.paymentMethod}</span>
+            </div>
+          </div>
+          <div class="footer">
+            <p>Received by: ${bill.receivedBy}</p>
+            <p class="thank">${footer}</p>
+          </div>
+        </div>
+        <script>window.onload=function(){window.print();}</script>
+      </body></html>
+    `;
   };
 
   // ========= REGISTER =========
@@ -123,36 +349,34 @@ export default function ReceptionPage() {
     if (!form.department) { showToast('Please select Department', 'error'); return; }
     if (!form.doctor) { showToast('Please select Doctor', 'error'); return; }
 
-    const patientNo = `BAGA-${String(patientCounter).padStart(4, '0')}`;
-    patientCounter++;
-    const today = new Date().toISOString().split('T')[0];
+    const newCounter = patientCounter;
+    const patientNo = `BAGA-${String(newCounter).padStart(4, '0')}`;
+    const today = todayStr();
     const expiry = new Date();
     expiry.setFullYear(expiry.getFullYear() + 1);
     const doc = selectedDoctorData(form.doctor);
 
     const newPatient: Patient = {
-      id: 'p' + Date.now(),
-      patientNo, name: form.name.trim(), fatherName: form.fatherName.trim(),
+      id: genId(), patientNo, name: form.name.trim(), fatherName: form.fatherName.trim(),
       mobile: form.mobile.trim(), age: form.age.trim(), gender: form.gender,
-      address: form.address.trim(), department: form.department, doctor: form.doctor,
-      cardStatus: 'Active', cardExpiry: expiry.toISOString().split('T')[0],
-      totalVisits: 0, lastVisit: today, lastDept: form.department, lastDoctor: form.doctor,
-      visitUsed: false, regDate: today
+      address: form.address.trim(), cardStatus: 'Active', cardExpiry: expiry.toISOString().split('T')[0],
+      totalVisits: 0, lastVisit: today, regDate: today
     };
-    setPatients([...patients, newPatient]);
+    addPatient(newPatient);
+    setPatientCounter(newCounter + 1);
+    setPatientCounterState(newCounter + 1);
 
-    // Create visit
-    const newVisit: VisitRecord = {
-      id: 'v' + Date.now(), patientNo: newPatient.patientNo, patientName: newPatient.name,
+    const newVisit: Visit = {
+      id: genId(), patientId: newPatient.id, patientNo: newPatient.patientNo, patientName: newPatient.name,
       department: form.department, doctor: form.doctor, doctorFee: doc?.fee || 0,
-      date: today, time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      date: today, time: timeStr(), status: 'Active', diagnosis: '', notes: '',
+      vitals: { bp: '', pulse: '', temp: '', weight: '' }
     };
-    setVisits([...visits, newVisit]);
+    addVisit(newVisit);
 
     setForm({ name: '', fatherName: '', mobile: '', age: '', gender: 'Male', address: '', department: '', doctor: '' });
-
-    // Show print card
-    handlePrintCard(newPatient, form.department, form.doctor);
+    handlePrintCard(newPatient, form.department, form.doctor, doc?.fee || 0);
+    refreshData();
     showToast(`Patient registered: ${patientNo}`, 'success');
   };
 
@@ -162,56 +386,44 @@ export default function ReceptionPage() {
     if (!visitDept) { showToast('Please select Department', 'error'); return; }
     if (!visitDoctor) { showToast('Please select Doctor', 'error'); return; }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayStr();
     const doc = selectedDoctorData(visitDoctor);
 
-    const newVisit: VisitRecord = {
-      id: 'v' + Date.now(), patientNo: visitPatient.patientNo, patientName: visitPatient.name,
+    const newVisit: Visit = {
+      id: genId(), patientId: visitPatient.id, patientNo: visitPatient.patientNo, patientName: visitPatient.name,
       department: visitDept, doctor: visitDoctor, doctorFee: doc?.fee || 0,
-      date: today, time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      date: today, time: timeStr(), status: 'Active', diagnosis: '', notes: '',
+      vitals: { bp: '', pulse: '', temp: '', weight: '' }
     };
+    addVisit(newVisit);
 
-    setPatients(patients.map(p => {
-      if (p.id === visitPatient.id) {
-        return {
-          ...p, totalVisits: p.totalVisits + 1, lastVisit: today,
-          lastDept: visitDept, lastDoctor: visitDoctor, visitUsed: true,
-          department: visitDept, doctor: visitDoctor
-        };
-      }
-      return p;
-    }));
-    setVisits([...visits, newVisit]);
+    updatePatient(visitPatient.id, {
+      totalVisits: visitPatient.totalVisits + 1,
+      lastVisit: today,
+    });
 
-    // Show print
-    handlePrintCard(
-      { ...visitPatient, department: visitDept, doctor: visitDoctor },
-      visitDept, visitDoctor
-    );
-
+    handlePrintCard({ ...visitPatient, totalVisits: visitPatient.totalVisits + 1, lastVisit: today }, visitDept, visitDoctor, doc?.fee || 0);
     setVisitPatient(null);
     setVisitDept('');
     setVisitDoctor('');
+    refreshData();
     showToast('New visit created successfully!', 'success');
   };
 
   // ========= CARD RENEWAL =========
   const handleRenewal = (patientId: string) => {
-    setPatients(patients.map(p => {
-      if (p.id === patientId) {
-        const expiry = new Date();
-        expiry.setFullYear(expiry.getFullYear() + 1);
-        return { ...p, cardStatus: 'Active', cardExpiry: expiry.toISOString().split('T')[0], visitUsed: false };
-      }
-      return p;
-    }));
-    setViewPatient(null);
-    showToast('Card renewed! Patient can now create new visit.', 'success');
+    const expiry = new Date();
+    expiry.setFullYear(expiry.getFullYear() + 1);
+    updatePatient(patientId, {
+      cardStatus: 'Active',
+      cardExpiry: expiry.toISOString().split('T')[0],
+    });
+    refreshData();
+    showToast('Card renewed successfully!', 'success');
   };
 
   // ========= PRINT CARD =========
-  const handlePrintCard = (patient: Patient, dept: string, doc: string) => {
-    const docData = selectedDoctorData(doc);
+  const handlePrintCard = (patient: Patient, dept: string, doc: string, fee: number) => {
     const cardHtml = `
       <html><head><title>Patient Card - ${patient.patientNo}</title>
       <style>
@@ -245,7 +457,7 @@ export default function ReceptionPage() {
           <div class="highlight">
             <p>Department: ${dept}</p>
             <p>Doctor: ${doc}</p>
-            ${docData ? `<p>Fee: Rs. ${docData.fee.toLocaleString()}</p>` : ''}
+            <p>Fee: Rs. ${fee.toLocaleString()}</p>
           </div>
           <div class="footer">Registered: ${patient.regDate} | This visit allows consultation with one doctor only</div>
         </div>
@@ -258,12 +470,14 @@ export default function ReceptionPage() {
   // ========= EDIT PATIENT =========
   const handleEditSave = () => {
     if (!editingPatient) return;
-    setPatients(patients.map(p => p.id === editingPatient.id ? editingPatient : p));
+    updatePatient(editingPatient.id, editingPatient);
     setEditingPatient(null);
+    refreshData();
     showToast('Patient updated!', 'success');
   };
 
-  const todayVisits = visits.filter(v => v.date === new Date().toISOString().split('T')[0]);
+  const todayVisits = visits.filter(v => v.date === todayStr());
+  const curr = settings?.currency || 'Rs.';
 
   return (
     <div className="space-y-5">
@@ -285,11 +499,16 @@ export default function ReceptionPage() {
 
       {/* ===== SEARCH BAR - TOP ===== */}
       <div className="bg-white rounded-xl border-2 border-blue-200 p-5">
-        <h2 className="text-lg font-bold text-slate-800 mb-3">Search Patient</h2>
+        <h2 className="text-lg font-bold text-slate-800 mb-3">
+          <span className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            Search Patient
+          </span>
+        </h2>
         <div className="flex gap-3">
           <input
             className="form-input flex-1 text-lg"
-            placeholder="Enter mobile number or card number (BAGA-0001)..."
+            placeholder="Enter mobile number, card number (BAGA-0001) or name..."
             value={searchQuery}
             onChange={e => { setSearchQuery(e.target.value); setSearched(false); }}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
@@ -302,46 +521,175 @@ export default function ReceptionPage() {
         {searched && searchResults.length > 0 && (
           <div className="mt-4 space-y-3">
             <p className="text-sm font-semibold text-slate-600">{searchResults.length} patient(s) found</p>
-            {searchResults.map(p => (
-              <div key={p.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono font-bold text-blue-600 text-lg">{p.patientNo}</span>
-                      <span className={`badge ${p.cardStatus === 'Active' ? 'badge-green' : 'badge-red'}`}>{p.cardStatus}</span>
-                    </div>
-                    <p className="font-semibold text-slate-800">{p.name} <span className="text-slate-500 font-normal">({p.gender}, {p.age})</span></p>
-                    <p className="text-sm text-slate-500">Father/Husband: {p.fatherName} | Mobile: {p.mobile}</p>
-                    <p className="text-sm text-slate-500">Address: {p.address}</p>
-                    <div className="flex gap-4 mt-2 text-xs text-slate-500">
-                      <span>Total Visits: <strong className="text-slate-700">{p.totalVisits}</strong></span>
-                      <span>Last Visit: <strong className="text-slate-700">{p.lastVisit}</strong></span>
-                      <span>Last Dept: <strong className="text-slate-700">{p.lastDept}</strong></span>
-                      <span>Last Doctor: <strong className="text-slate-700">{p.lastDoctor}</strong></span>
-                    </div>
-                    {p.visitUsed && p.cardStatus === 'Active' && (
-                      <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-amber-700 text-xs">
-                        This visit is already used. Card renewal required for new visit.
+            {searchResults.map(p => {
+              const activeVisit = getActiveVisit(p.id);
+              const visitLabOrders = activeVisit ? getLabOrdersByVisit(activeVisit.id) : [];
+              const visitPresc = activeVisit ? getPrescriptionsByVisit(activeVisit.id) : [];
+              const visitXray = activeVisit ? getXRayOrdersByVisit(activeVisit.id) : [];
+              const visitUsg = activeVisit ? getUltrasoundOrdersByVisit(activeVisit.id) : [];
+              const existingBill = activeVisit ? bills.find(b => b.visitId === activeVisit.id && b.status === 'Paid') : null;
+
+              return (
+                <div key={p.id} className="border-2 border-slate-200 rounded-xl p-5 hover:border-blue-300 transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono font-bold text-blue-600 text-lg">{p.patientNo}</span>
+                        <span className={`badge ${p.cardStatus === 'Active' ? 'badge-green' : 'badge-red'}`}>{p.cardStatus}</span>
+                        {activeVisit && <span className="badge badge-blue">Active Visit</span>}
+                        {existingBill && <span className="badge badge-green">Bill Paid</span>}
                       </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-2 ml-4">
-                    {!p.visitUsed && p.cardStatus === 'Active' && (
-                      <button onClick={() => { setVisitPatient(p); setVisitDept(''); setVisitDoctor(''); }} className="btn btn-success btn-sm whitespace-nowrap">New Visit</button>
-                    )}
-                    {p.cardStatus === 'Expired' && (
-                      <button onClick={() => handleRenewal(p.id)} className="btn btn-sm" style={{ background: '#d97706', color: 'white' }}>Renew Card</button>
-                    )}
-                    {p.visitUsed && p.cardStatus === 'Active' && (
-                      <button onClick={() => handleRenewal(p.id)} className="btn btn-sm" style={{ background: '#d97706', color: 'white' }}>Renew Card</button>
-                    )}
-                    <button onClick={() => handlePrintCard(p, p.lastDept || p.department, p.lastDoctor || p.doctor)} className="btn btn-outline btn-sm whitespace-nowrap">Print Card</button>
-                    <button onClick={() => setViewPatient(p)} className="btn btn-outline btn-sm whitespace-nowrap">View Details</button>
-                    <button onClick={() => setEditingPatient({ ...p })} className="btn btn-outline btn-sm whitespace-nowrap">Edit</button>
+                      <p className="font-semibold text-slate-800 text-lg">{p.name} <span className="text-slate-500 font-normal text-sm">({p.gender}, {p.age})</span></p>
+                      <p className="text-sm text-slate-500">Father/Husband: {p.fatherName} | Mobile: {p.mobile}</p>
+                      <p className="text-sm text-slate-500">Address: {p.address}</p>
+
+                      {/* Active Visit Details */}
+                      {activeVisit && (
+                        <div className="mt-3 space-y-2">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <p className="text-sm font-semibold text-blue-800 mb-1">Current Visit - {activeVisit.date} {activeVisit.time}</p>
+                            <p className="text-xs text-blue-700">Department: <strong>{activeVisit.department}</strong> | Doctor: <strong>{activeVisit.doctor}</strong> | Fee: <strong>{curr} {activeVisit.doctorFee.toLocaleString()}</strong></p>
+                            {activeVisit.diagnosis && <p className="text-xs text-blue-700 mt-1">Diagnosis: {activeVisit.diagnosis}</p>}
+                          </div>
+
+                          {/* Lab Tests */}
+                          {visitLabOrders.length > 0 && (
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                              <p className="text-sm font-semibold text-green-800 mb-2">
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                  Lab Tests
+                                </span>
+                              </p>
+                              <div className="space-y-1">
+                                {visitLabOrders.map(lo => lo.tests.map((t, i) => (
+                                  <div key={i} className="flex justify-between text-xs">
+                                    <span className="text-green-700">{t.testName}</span>
+                                    <span className="font-semibold text-green-800">{curr} {t.price.toLocaleString()}</span>
+                                  </div>
+                                )))}
+                                <div className="flex justify-between text-xs font-bold border-t border-green-300 pt-1 mt-1">
+                                  <span className="text-green-800">Lab Subtotal</span>
+                                  <span className="text-green-800">{curr} {visitLabOrders.reduce((s, lo) => s + lo.tests.reduce((ss, t) => ss + t.price, 0), 0).toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* X-Ray */}
+                          {visitXray.length > 0 && (
+                            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                              <p className="text-sm font-semibold text-red-800 mb-2">
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                  X-Ray
+                                </span>
+                              </p>
+                              {visitXray.map(x => (
+                                <div key={x.id} className="flex justify-between text-xs">
+                                  <span className="text-red-700">{x.xrayType}</span>
+                                  <span className="font-semibold text-red-800">{curr} {x.price.toLocaleString()}</span>
+                                </div>
+                              ))}
+                              <div className="flex justify-between text-xs font-bold border-t border-red-300 pt-1 mt-1">
+                                <span className="text-red-800">X-Ray Subtotal</span>
+                                <span className="text-red-800">{curr} {visitXray.reduce((s, x) => s + x.price, 0).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Ultrasound */}
+                          {visitUsg.length > 0 && (
+                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                              <p className="text-sm font-semibold text-purple-800 mb-2">
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                  Ultrasound
+                                </span>
+                              </p>
+                              {visitUsg.map(u => (
+                                <div key={u.id} className="flex justify-between text-xs">
+                                  <span className="text-purple-700">{u.usgType}</span>
+                                  <span className="font-semibold text-purple-800">{curr} {u.price.toLocaleString()}</span>
+                                </div>
+                              ))}
+                              <div className="flex justify-between text-xs font-bold border-t border-purple-300 pt-1 mt-1">
+                                <span className="text-purple-800">Ultrasound Subtotal</span>
+                                <span className="text-purple-800">{curr} {visitUsg.reduce((s, u) => s + u.price, 0).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Medication/Pharmacy */}
+                          {visitPresc.length > 0 && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                              <p className="text-sm font-semibold text-amber-800 mb-2">
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                                  Medicines / Pharmacy
+                                </span>
+                              </p>
+                              <div className="space-y-1">
+                                {visitPresc.map(pr => pr.medicines.map((m, i) => (
+                                  <div key={i} className="flex justify-between text-xs">
+                                    <span className="text-amber-700">{m.name} ({m.dosage}, {m.duration})</span>
+                                    <span className="font-semibold text-amber-800">{curr} {m.price.toLocaleString()}</span>
+                                  </div>
+                                )))}
+                              </div>
+                              <div className="flex justify-between text-xs font-bold border-t border-amber-300 pt-1 mt-1">
+                                <span className="text-amber-800">Pharmacy Subtotal</span>
+                                <span className="text-amber-800">{curr} {visitPresc.reduce((s, pr) => s + pr.medicines.reduce((ss, m) => ss + m.price, 0), 0).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Grand Total */}
+                          {(visitLabOrders.length > 0 || visitXray.length > 0 || visitUsg.length > 0 || visitPresc.length > 0) && (
+                            <div className="bg-slate-800 rounded-lg p-3">
+                              <div className="flex justify-between text-sm text-white font-bold">
+                                <span>GRAND TOTAL</span>
+                                <span>{curr} {(
+                                  activeVisit.doctorFee +
+                                  visitLabOrders.reduce((s, lo) => s + lo.tests.reduce((ss, t) => ss + t.price, 0), 0) +
+                                  visitXray.reduce((s, x) => s + x.price, 0) +
+                                  visitUsg.reduce((s, u) => s + u.price, 0) +
+                                  visitPresc.reduce((s, pr) => s + pr.medicines.reduce((ss, m) => ss + m.price, 0), 0)
+                                ).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-col gap-2 min-w-[120px]">
+                      {activeVisit && !existingBill && (
+                        <button onClick={() => handleOpenBill(p)} className="btn btn-primary btn-sm whitespace-nowrap">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                          Generate Bill
+                        </button>
+                      )}
+                      {existingBill && (
+                        <button onClick={() => setReceiptBill(existingBill)} className="btn btn-success btn-sm whitespace-nowrap">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                          View Receipt
+                        </button>
+                      )}
+                      {!activeVisit && p.cardStatus === 'Active' && (
+                        <button onClick={() => { setVisitPatient(p); setVisitDept(''); setVisitDoctor(''); }} className="btn btn-success btn-sm whitespace-nowrap">New Visit</button>
+                      )}
+                      {p.cardStatus === 'Expired' && (
+                        <button onClick={() => handleRenewal(p.id)} className="btn btn-sm whitespace-nowrap" style={{ background: '#d97706', color: 'white' }}>Renew Card</button>
+                      )}
+                      <button onClick={() => handlePrintCard(p, activeVisit?.department || '', activeVisit?.doctor || '', activeVisit?.doctorFee || 0)} className="btn btn-outline btn-sm whitespace-nowrap">Print Card</button>
+                      <button onClick={() => setEditingPatient({ ...p })} className="btn btn-outline btn-sm whitespace-nowrap">Edit</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         {searched && searchResults.length === 0 && (
@@ -354,7 +702,12 @@ export default function ReceptionPage() {
       {/* ===== NEW PATIENT REGISTRATION ===== */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-bold text-slate-800">New Patient Registration</h2>
+          <h2 className="text-lg font-bold text-slate-800">
+            <span className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+              New Patient Registration
+            </span>
+          </h2>
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-1">
             <span className="text-sm text-blue-700 font-semibold">Next No: BAGA-{String(patientCounter).padStart(4, '0')}</span>
           </div>
@@ -389,8 +742,6 @@ export default function ReceptionPage() {
             <label className="form-label">Address *</label>
             <input className="form-input" placeholder="Full address" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
           </div>
-
-          {/* Department & Doctor Selection */}
           <div>
             <label className="form-label">Department *</label>
             <select className="form-input" value={form.department} onChange={e => { setForm({...form, department: e.target.value, doctor: ''}); }}>
@@ -403,14 +754,14 @@ export default function ReceptionPage() {
             <select className="form-input" value={form.doctor} onChange={e => setForm({...form, doctor: e.target.value})} disabled={!form.department}>
               <option value="">-- Select Doctor --</option>
               {form.department && filteredDoctors(form.department).map(d => (
-                <option key={d.id} value={d.name}>{d.name} (Rs. {d.fee.toLocaleString()})</option>
+                <option key={d.id} value={d.name}>{d.name} ({curr} {d.fee.toLocaleString()})</option>
               ))}
             </select>
           </div>
           {form.doctor && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center">
               <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              <span className="text-sm text-blue-700">Doctor Fee: <strong>Rs. {selectedDoctorData(form.doctor)?.fee.toLocaleString()}</strong></span>
+              <span className="text-sm text-blue-700">Doctor Fee: <strong>{curr} {selectedDoctorData(form.doctor)?.fee.toLocaleString()}</strong></span>
             </div>
           )}
         </div>
@@ -427,26 +778,32 @@ export default function ReceptionPage() {
         <p className="text-sm text-slate-500 mb-4">All visits created today</p>
         {todayVisits.length === 0 ? (
           <div className="text-center py-8 text-slate-400">
-            <p className="text-4xl mb-2">📋</p>
+            <svg className="w-12 h-12 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
             <p>No visits created today yet</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
-                <tr><th>Patient No</th><th>Name</th><th>Department</th><th>Doctor</th><th>Fee</th><th>Time</th></tr>
+                <tr><th>Patient No</th><th>Name</th><th>Department</th><th>Doctor</th><th>Fee</th><th>Time</th><th>Status</th></tr>
               </thead>
               <tbody>
-                {todayVisits.map(v => (
-                  <tr key={v.id}>
-                    <td className="font-mono font-bold text-blue-600">{v.patientNo}</td>
-                    <td className="font-medium">{v.patientName}</td>
-                    <td><span className="badge badge-purple">{v.department}</span></td>
-                    <td>{v.doctor}</td>
-                    <td className="font-semibold">Rs. {v.doctorFee.toLocaleString()}</td>
-                    <td>{v.time}</td>
-                  </tr>
-                ))}
+                {todayVisits.map(v => {
+                  const hasBill = bills.find(b => b.visitId === v.id && b.status === 'Paid');
+                  return (
+                    <tr key={v.id}>
+                      <td className="font-mono font-bold text-blue-600">{v.patientNo}</td>
+                      <td className="font-medium">{v.patientName}</td>
+                      <td><span className="badge badge-purple">{v.department}</span></td>
+                      <td className="text-sm">{v.doctor}</td>
+                      <td className="font-semibold">{curr} {v.doctorFee.toLocaleString()}</td>
+                      <td>{v.time}</td>
+                      <td>
+                        {hasBill ? <span className="badge badge-green">Paid</span> : <span className="badge badge-amber">Unpaid</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -462,46 +819,316 @@ export default function ReceptionPage() {
             <thead>
               <tr>
                 <th>Patient No</th><th>Name</th><th>Father Name</th><th>Mobile</th><th>Age/Gender</th>
-                <th>Department</th><th>Doctor</th><th>Visits</th><th>Card</th><th>Visit Used</th><th>Actions</th>
+                <th>Department</th><th>Doctor</th><th>Visits</th><th>Card</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {patients.map(p => (
-                <tr key={p.id}>
-                  <td className="font-mono font-bold text-blue-600">{p.patientNo}</td>
-                  <td className="font-medium">{p.name}</td>
-                  <td>{p.fatherName}</td>
-                  <td className="font-mono text-sm">{p.mobile}</td>
-                  <td>{p.age}/{p.gender}</td>
-                  <td><span className="badge badge-purple">{p.department}</span></td>
-                  <td className="text-sm">{p.doctor}</td>
-                  <td className="text-center">{p.totalVisits}</td>
-                  <td><span className={`badge ${p.cardStatus === 'Active' ? 'badge-green' : 'badge-red'}`}>{p.cardStatus}</span></td>
-                  <td>
-                    {p.visitUsed ? (
-                      <span className="badge badge-amber">Used</span>
-                    ) : (
-                      <span className="badge badge-green">Available</span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="flex gap-1">
-                      {!p.visitUsed && p.cardStatus === 'Active' && (
-                        <button onClick={() => { setVisitPatient(p); setVisitDept(''); setVisitDoctor(''); }} className="btn btn-success btn-sm">Visit</button>
-                      )}
-                      <button onClick={() => handlePrintCard(p, p.lastDept || p.department, p.lastDoctor || p.doctor)} className="btn btn-outline btn-sm">Print</button>
-                      <button onClick={() => setEditingPatient({ ...p })} className="btn btn-outline btn-sm">Edit</button>
-                      {(p.cardStatus === 'Expired' || p.visitUsed) && (
-                        <button onClick={() => handleRenewal(p.id)} className="btn btn-sm" style={{ background: '#d97706', color: 'white' }}>Renew</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {patients.map(p => {
+                const activeVisit = getActiveVisit(p.id);
+                const hasBill = activeVisit ? bills.find(b => b.visitId === activeVisit.id && b.status === 'Paid') : false;
+                return (
+                  <tr key={p.id}>
+                    <td className="font-mono font-bold text-blue-600">{p.patientNo}</td>
+                    <td className="font-medium">{p.name}</td>
+                    <td>{p.fatherName}</td>
+                    <td className="font-mono text-sm">{p.mobile}</td>
+                    <td>{p.age}/{p.gender}</td>
+                    <td><span className="badge badge-purple">{activeVisit?.department || '-'}</span></td>
+                    <td className="text-sm">{activeVisit?.doctor || '-'}</td>
+                    <td className="text-center">{p.totalVisits}</td>
+                    <td><span className={`badge ${p.cardStatus === 'Active' ? 'badge-green' : 'badge-red'}`}>{p.cardStatus}</span></td>
+                    <td>
+                      <div className="flex gap-1 flex-wrap">
+                        {activeVisit && !hasBill && (
+                          <button onClick={() => handleOpenBill(p)} className="btn btn-primary btn-sm">Bill</button>
+                        )}
+                        {activeVisit && hasBill && (
+                          <button onClick={() => setReceiptBill(hasBill)} className="btn btn-success btn-sm">Receipt</button>
+                        )}
+                        {!activeVisit && p.cardStatus === 'Active' && (
+                          <button onClick={() => { setVisitPatient(p); setVisitDept(''); setVisitDoctor(''); }} className="btn btn-success btn-sm">Visit</button>
+                        )}
+                        <button onClick={() => handlePrintCard(p, activeVisit?.department || '', activeVisit?.doctor || '', activeVisit?.doctorFee || 0)} className="btn btn-outline btn-sm">Print</button>
+                        <button onClick={() => setEditingPatient({ ...p })} className="btn btn-outline btn-sm">Edit</button>
+                        {p.cardStatus === 'Expired' && (
+                          <button onClick={() => handleRenewal(p.id)} className="btn btn-sm" style={{ background: '#d97706', color: 'white' }}>Renew</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* ===== BILL MODAL ===== */}
+      {billModal && billCalculations && (
+        <div className="modal-overlay" onClick={() => setBillModal(null)}>
+          <div className="modal-content" style={{ maxWidth: '750px' }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Generate Bill</h3>
+                <p className="text-sm text-blue-600 font-mono">{billModal.patient.patientNo} - {billModal.patient.name}</p>
+              </div>
+              <button onClick={() => setBillModal(null)} className="btn btn-outline btn-sm">Close</button>
+            </div>
+
+            {/* Patient Info */}
+            <div className="bg-slate-50 rounded-lg p-3 mb-4 grid grid-cols-2 gap-2 text-sm">
+              <div><span className="text-slate-500">Father/Husband:</span> <strong>{billModal.patient.fatherName}</strong></div>
+              <div><span className="text-slate-500">Mobile:</span> <strong>{billModal.patient.mobile}</strong></div>
+              <div><span className="text-slate-500">Department:</span> <strong>{billModal.visit.department}</strong></div>
+              <div><span className="text-slate-500">Doctor:</span> <strong>{billModal.visit.doctor}</strong></div>
+              <div><span className="text-slate-500">Visit Date:</span> <strong>{billModal.visit.date} {billModal.visit.time}</strong></div>
+              {billModal.visit.diagnosis && <div><span className="text-slate-500">Diagnosis:</span> <strong>{billModal.visit.diagnosis}</strong></div>}
+            </div>
+
+            <p className="text-xs text-amber-600 mb-3 bg-amber-50 border border-amber-200 rounded-lg p-2">
+              <strong>Instructions:</strong> Patient can ask to remove any test or medicine they do not want. Uncheck the items below to remove them from the bill. The total will adjust automatically.
+            </p>
+
+            {/* Consultation Fee */}
+            <div className="border border-slate-200 rounded-lg mb-3">
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-t-lg">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={billModal.consultationSelected}
+                    onChange={e => setBillModal({ ...billModal, consultationSelected: e.target.checked })}
+                    className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <p className="font-semibold text-slate-800">Doctor Consultation Fee</p>
+                    <p className="text-xs text-slate-500">{billModal.visit.doctor} - {billModal.visit.department}</p>
+                  </div>
+                </label>
+                <span className="font-bold text-blue-700 text-lg">{curr} {billModal.consultationFee.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Lab Tests */}
+            {billModal.labTests.length > 0 && (
+              <div className="border border-green-200 rounded-lg mb-3">
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded-t-lg border-b border-green-200">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    <span className="font-semibold text-green-800">Lab Tests</span>
+                    <span className="text-xs text-green-600">({billModal.labTests.filter(t => t.selected).length}/{billModal.labTests.length} selected)</span>
+                  </div>
+                  <span className="font-bold text-green-700">{curr} {billCalculations.labTotal.toLocaleString()}</span>
+                </div>
+                <div className="p-3 space-y-2">
+                  {billModal.labTests.map((test, idx) => (
+                    <label key={idx} className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${test.selected ? 'bg-white border border-green-200' : 'bg-slate-50 border border-slate-200 opacity-60'}`}>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={test.selected}
+                          onChange={e => {
+                            const newTests = [...billModal.labTests];
+                            newTests[idx] = { ...newTests[idx], selected: e.target.checked };
+                            setBillModal({ ...billModal, labTests: newTests });
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                        />
+                        <span className={`text-sm ${test.selected ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{test.testName}</span>
+                      </div>
+                      <span className={`font-semibold text-sm ${test.selected ? 'text-green-700' : 'text-slate-400'}`}>{curr} {test.price.toLocaleString()}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* X-Ray */}
+            {billModal.xrays.length > 0 && (
+              <div className="border border-red-200 rounded-lg mb-3">
+                <div className="flex items-center justify-between p-3 bg-red-50 rounded-t-lg border-b border-red-200">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    <span className="font-semibold text-red-800">X-Ray</span>
+                    <span className="text-xs text-red-600">({billModal.xrays.filter(x => x.selected).length}/{billModal.xrays.length} selected)</span>
+                  </div>
+                  <span className="font-bold text-red-700">{curr} {billCalculations.xrayTotal.toLocaleString()}</span>
+                </div>
+                <div className="p-3 space-y-2">
+                  {billModal.xrays.map((xray, idx) => (
+                    <label key={xray.id} className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${xray.selected ? 'bg-white border border-red-200' : 'bg-slate-50 border border-slate-200 opacity-60'}`}>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={xray.selected}
+                          onChange={e => {
+                            const newXrays = [...billModal.xrays];
+                            newXrays[idx] = { ...newXrays[idx], selected: e.target.checked };
+                            setBillModal({ ...billModal, xrays: newXrays });
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                        />
+                        <span className={`text-sm ${xray.selected ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{xray.xrayType}</span>
+                      </div>
+                      <span className={`font-semibold text-sm ${xray.selected ? 'text-red-700' : 'text-slate-400'}`}>{curr} {xray.price.toLocaleString()}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Ultrasound */}
+            {billModal.ultrasounds.length > 0 && (
+              <div className="border border-purple-200 rounded-lg mb-3">
+                <div className="flex items-center justify-between p-3 bg-purple-50 rounded-t-lg border-b border-purple-200">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span className="font-semibold text-purple-800">Ultrasound</span>
+                    <span className="text-xs text-purple-600">({billModal.ultrasounds.filter(u => u.selected).length}/{billModal.ultrasounds.length} selected)</span>
+                  </div>
+                  <span className="font-bold text-purple-700">{curr} {billCalculations.usgTotal.toLocaleString()}</span>
+                </div>
+                <div className="p-3 space-y-2">
+                  {billModal.ultrasounds.map((usg, idx) => (
+                    <label key={usg.id} className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${usg.selected ? 'bg-white border border-purple-200' : 'bg-slate-50 border border-slate-200 opacity-60'}`}>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={usg.selected}
+                          onChange={e => {
+                            const newUsgs = [...billModal.ultrasounds];
+                            newUsgs[idx] = { ...newUsgs[idx], selected: e.target.checked };
+                            setBillModal({ ...billModal, ultrasounds: newUsgs });
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className={`text-sm ${usg.selected ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{usg.usgType}</span>
+                      </div>
+                      <span className={`font-semibold text-sm ${usg.selected ? 'text-purple-700' : 'text-slate-400'}`}>{curr} {usg.price.toLocaleString()}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Medicines / Pharmacy */}
+            {billModal.medicines.length > 0 && (settings?.receptionCanCollectPharmacy !== false) && (
+              <div className="border border-amber-200 rounded-lg mb-3">
+                <div className="flex items-center justify-between p-3 bg-amber-50 rounded-t-lg border-b border-amber-200">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                    <span className="font-semibold text-amber-800">Medicines / Pharmacy</span>
+                    <span className="text-xs text-amber-600">({billModal.medicines.filter(m => m.selected).length}/{billModal.medicines.length} selected)</span>
+                  </div>
+                  <span className="font-bold text-amber-700">{curr} {billCalculations.pharmacyTotal.toLocaleString()}</span>
+                </div>
+                <div className="p-3 space-y-2">
+                  {billModal.medicines.map((med, idx) => (
+                    <label key={idx} className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${med.selected ? 'bg-white border border-amber-200' : 'bg-slate-50 border border-slate-200 opacity-60'}`}>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={med.selected}
+                          onChange={e => {
+                            const newMeds = [...billModal.medicines];
+                            newMeds[idx] = { ...newMeds[idx], selected: e.target.checked };
+                            setBillModal({ ...billModal, medicines: newMeds });
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                        />
+                        <div>
+                          <span className={`text-sm ${med.selected ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{med.name}</span>
+                          <span className="text-xs text-slate-500 ml-2">({med.dosage}, {med.duration}, {med.frequency})</span>
+                        </div>
+                      </div>
+                      <span className={`font-semibold text-sm ${med.selected ? 'text-amber-700' : 'text-slate-400'}`}>{curr} {med.price.toLocaleString()}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Medicines hidden by Super Admin */}
+            {billModal.medicines.length > 0 && (settings?.receptionCanCollectPharmacy === false) && (
+              <div className="border border-slate-200 rounded-lg mb-3 p-3 bg-slate-100">
+                <p className="text-sm text-slate-500 text-center">
+                  <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  Pharmacy payment collection is disabled by Super Admin. Patients will pay directly at Pharmacy.
+                </p>
+              </div>
+            )}
+
+            {/* Total Section */}
+            <div className="bg-slate-800 rounded-xl p-4 text-white">
+              <div className="space-y-2">
+                {billModal.consultationSelected && (
+                  <div className="flex justify-between text-sm">
+                    <span>Consultation Fee</span>
+                    <span>{curr} {billCalculations.consultation.toLocaleString()}</span>
+                  </div>
+                )}
+                {billCalculations.labTotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Lab Tests</span>
+                    <span>{curr} {billCalculations.labTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                {billCalculations.xrayTotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>X-Ray</span>
+                    <span>{curr} {billCalculations.xrayTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                {billCalculations.usgTotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Ultrasound</span>
+                    <span>{curr} {billCalculations.usgTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                {billCalculations.pharmacyTotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Medicines / Pharmacy</span>
+                    <span>{curr} {billCalculations.pharmacyTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xl font-bold border-t border-slate-600 pt-2 mt-2">
+                  <span>GRAND TOTAL</span>
+                  <span>{curr} {billCalculations.grandTotal.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={handleReceivePayment}
+                disabled={billCalculations.grandTotal === 0}
+                className="btn btn-success btn-lg flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                Receive Payment & Print Receipt ({curr} {billCalculations.grandTotal.toLocaleString()})
+              </button>
+              <button onClick={() => setBillModal(null)} className="btn btn-outline btn-lg">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== RECEIPT MODAL ===== */}
+      {receiptBill && (
+        <div className="modal-overlay" style={{ zIndex: 200 }}>
+          <div className="modal-content" style={{ maxWidth: '450px' }}>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-semibold">Payment Receipt</h3>
+              <button onClick={() => setReceiptBill(null)} className="btn btn-outline btn-sm">Close</button>
+            </div>
+            <iframe
+              srcDoc={getReceiptHtml(receiptBill)}
+              style={{ width: '100%', height: '600px', border: 'none' }}
+              title="Receipt"
+            />
+          </div>
+        </div>
+      )}
 
       {/* ===== NEW VISIT MODAL ===== */}
       {visitPatient && (
@@ -519,7 +1146,7 @@ export default function ReceptionPage() {
               <p><span className="text-slate-500">Father/Husband:</span> <strong>{visitPatient.fatherName}</strong></p>
               <p><span className="text-slate-500">Mobile:</span> <strong>{visitPatient.mobile}</strong></p>
               <p><span className="text-slate-500">Total Previous Visits:</span> <strong>{visitPatient.totalVisits}</strong></p>
-              <p><span className="text-slate-500">Last Visit:</span> <strong>{visitPatient.lastVisit} ({visitPatient.lastDept} - {visitPatient.lastDoctor})</strong></p>
+              <p><span className="text-slate-500">Last Visit:</span> <strong>{visitPatient.lastVisit}</strong></p>
             </div>
 
             <div className="space-y-4">
@@ -535,19 +1162,16 @@ export default function ReceptionPage() {
                 <select className="form-input" value={visitDoctor} onChange={e => setVisitDoctor(e.target.value)} disabled={!visitDept}>
                   <option value="">-- Select Doctor --</option>
                   {visitDept && filteredDoctors(visitDept).map(d => (
-                    <option key={d.id} value={d.name}>{d.name} - Rs. {d.fee.toLocaleString()} ({d.timing})</option>
+                    <option key={d.id} value={d.name}>{d.name} - {curr} {d.fee.toLocaleString()} ({d.timing})</option>
                   ))}
                 </select>
               </div>
               {visitDoctor && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
                   <span className="text-sm text-blue-700">Doctor Fee:</span>
-                  <span className="font-bold text-blue-700 text-lg">Rs. {selectedDoctorData(visitDoctor)?.fee.toLocaleString()}</span>
+                  <span className="font-bold text-blue-700 text-lg">{curr} {selectedDoctorData(visitDoctor)?.fee.toLocaleString()}</span>
                 </div>
               )}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
-                <strong>Note:</strong> After creating this visit, the patient will need to renew their card before visiting any other doctor.
-              </div>
             </div>
 
             <div className="flex gap-3 mt-5">
@@ -598,72 +1222,6 @@ export default function ReceptionPage() {
               <div className="flex gap-3 pt-2">
                 <button onClick={handleEditSave} className="btn btn-primary btn-lg">Save Changes</button>
                 <button onClick={() => setEditingPatient(null)} className="btn btn-outline btn-lg">Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== VIEW PATIENT DETAILS MODAL ===== */}
-      {viewPatient && (
-        <div className="modal-overlay" onClick={() => setViewPatient(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">Patient Details</h3>
-                <p className="text-sm text-blue-600 font-mono">{viewPatient.patientNo}</p>
-              </div>
-              <button onClick={() => setViewPatient(null)} className="btn btn-outline btn-sm">Close</button>
-            </div>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500">Name</p>
-                  <p className="font-semibold text-slate-800">{viewPatient.name}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500">Father/Husband</p>
-                  <p className="font-semibold text-slate-800">{viewPatient.fatherName}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500">Mobile</p>
-                  <p className="font-semibold text-slate-800 font-mono">{viewPatient.mobile}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500">Age / Gender</p>
-                  <p className="font-semibold text-slate-800">{viewPatient.age} / {viewPatient.gender}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3 col-span-2">
-                  <p className="text-xs text-slate-500">Address</p>
-                  <p className="font-semibold text-slate-800">{viewPatient.address}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500">Card Status</p>
-                  <p><span className={`badge ${viewPatient.cardStatus === 'Active' ? 'badge-green' : 'badge-red'}`}>{viewPatient.cardStatus}</span></p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500">Card Expiry</p>
-                  <p className="font-semibold text-slate-800">{viewPatient.cardExpiry}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500">Total Visits</p>
-                  <p className="font-semibold text-slate-800">{viewPatient.totalVisits}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500">Visit Available</p>
-                  <p><span className={`badge ${viewPatient.visitUsed ? 'badge-amber' : 'badge-green'}`}>{viewPatient.visitUsed ? 'Used' : 'Available'}</span></p>
-                </div>
-                <div className="bg-blue-50 rounded-lg p-3 col-span-2">
-                  <p className="text-xs text-blue-500">Last Visit</p>
-                  <p className="font-semibold text-blue-800">{viewPatient.lastVisit} - {viewPatient.lastDept} - {viewPatient.lastDoctor}</p>
-                </div>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => handlePrintCard(viewPatient, viewPatient.lastDept, viewPatient.lastDoctor)} className="btn btn-primary">Print Card</button>
-                {(viewPatient.cardStatus === 'Expired' || viewPatient.visitUsed) && (
-                  <button onClick={() => handleRenewal(viewPatient.id)} className="btn btn-sm" style={{ background: '#d97706', color: 'white' }}>Renew Card</button>
-                )}
-                <button onClick={() => setViewPatient(null)} className="btn btn-outline">Close</button>
               </div>
             </div>
           </div>

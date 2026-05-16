@@ -22,7 +22,7 @@ export default function LabPage() {
 
   const openResult=(order:LabOrder)=>{
     setResultOrder(order);
-    setResults(order.testNames.map(t=>({testName:t,value:'',unit:'',normalRange:'',status:'Normal'})));
+    setResults(order.tests.map(t=>({testName:t.testName,value:'',unit:'',normalRange:'',status:'Normal'})));
   };
 
   const saveResults=()=>{
@@ -59,7 +59,7 @@ export default function LabPage() {
                 <tr key={o.id}>
                   <td className="font-mono font-bold text-blue-600">{o.patientNo}</td>
                   <td className="font-medium">{o.patientName}</td>
-                  <td><div className="flex flex-wrap gap-1">{o.testNames.map((t,i)=><span key={i} className="badge badge-blue">{t}</span>)}</div></td>
+                  <td><div className="flex flex-wrap gap-1">{o.tests.map((t,i)=><span key={i} className="badge badge-blue">{t.testName}</span>)}</div></td>
                   <td className="text-sm">{o.orderedBy}</td>
                   <td>{o.date}</td><td>{o.time}</td>
                   <td><span className={`badge ${o.status==='Pending'?'badge-amber':o.status==='In Progress'?'badge-blue':'badge-green'}`}>{o.status}</span></td>
