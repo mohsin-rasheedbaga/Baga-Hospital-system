@@ -1,20 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
-
-interface Stats {
-  todayPatients: number;
-  totalPatients: number;
-  activeDoctors: number;
-  todayRevenue: number;
-  pendingLab: number;
-  pendingPharmacy: number;
-}
+import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats>({
-    todayPatients: 12, totalPatients: 1450, activeDoctors: 8,
-    todayRevenue: 45000, pendingLab: 5, pendingPharmacy: 8
-  });
+  const router = useRouter();
 
   const recentActivity = [
     { id: 1, text: 'Patient Muhammad Ali registered', time: '2 min ago', type: 'reception' },
@@ -26,12 +14,21 @@ export default function DashboardPage() {
   ];
 
   const statCards = [
-    { label: 'Today\'s Patients', value: stats.todayPatients, icon: '🏥', color: 'bg-blue-50 border-blue-200' },
-    { label: 'Total Patients', value: stats.totalPatients, icon: '👥', color: 'bg-emerald-50 border-emerald-200' },
-    { label: 'Active Doctors', value: stats.activeDoctors, icon: '👨‍⚕️', color: 'bg-purple-50 border-purple-200' },
-    { label: 'Today\'s Revenue', value: `Rs. ${stats.todayRevenue.toLocaleString()}`, icon: '💰', color: 'bg-amber-50 border-amber-200' },
-    { label: 'Pending Lab Tests', value: stats.pendingLab, icon: '🔬', color: 'bg-teal-50 border-teal-200' },
-    { label: 'Pending Pharmacy', value: stats.pendingPharmacy, icon: '💊', color: 'bg-rose-50 border-rose-200' },
+    { label: "Today's Patients", value: '12', icon: '🏥', color: 'bg-blue-50 border-blue-200' },
+    { label: 'Total Patients', value: '1,450', icon: '👥', color: 'bg-emerald-50 border-emerald-200' },
+    { label: 'Active Doctors', value: '8', icon: '👨‍⚕️', color: 'bg-purple-50 border-purple-200' },
+    { label: "Today's Revenue", value: 'Rs. 45,000', icon: '💰', color: 'bg-amber-50 border-amber-200' },
+    { label: 'Pending Lab Tests', value: '5', icon: '🔬', color: 'bg-teal-50 border-teal-200' },
+    { label: 'Pending Pharmacy', value: '8', icon: '💊', color: 'bg-rose-50 border-rose-200' },
+  ];
+
+  const quickActions = [
+    { label: 'New Patient', desc: 'Register new patient', color: 'bg-blue-600 hover:bg-blue-700', route: '/reception' },
+    { label: 'New Visit', desc: 'Create patient visit', color: 'bg-emerald-600 hover:bg-emerald-700', route: '/reception' },
+    { label: 'Lab Tests', desc: 'View pending tests', color: 'bg-teal-600 hover:bg-teal-700', route: '/lab' },
+    { label: 'X-Ray Queue', desc: 'View x-ray queue', color: 'bg-rose-600 hover:bg-rose-700', route: '/xray' },
+    { label: 'Pharmacy', desc: 'Dispense medicine', color: 'bg-amber-600 hover:bg-amber-700', route: '/pharmacy' },
+    { label: 'Accounts', desc: 'Billing & payments', color: 'bg-indigo-600 hover:bg-indigo-700', route: '/accounts' },
   ];
 
   return (
@@ -75,19 +72,16 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Quick Actions - Now navigates */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: 'New Patient', desc: 'Register new patient', color: 'bg-blue-600 hover:bg-blue-700' },
-              { label: 'New Visit', desc: 'Create patient visit', color: 'bg-emerald-600 hover:bg-emerald-700' },
-              { label: 'Lab Tests', desc: 'View pending tests', color: 'bg-teal-600 hover:bg-teal-700' },
-              { label: 'X-Ray Queue', desc: 'View x-ray queue', color: 'bg-rose-600 hover:bg-rose-700' },
-              { label: 'Pharmacy', desc: 'Dispense medicine', color: 'bg-amber-600 hover:bg-amber-700' },
-              { label: 'Daily Report', desc: 'View today report', color: 'bg-indigo-600 hover:bg-indigo-700' },
-            ].map((action, idx) => (
-              <button key={idx} className={`${action.color} text-white rounded-lg p-4 text-left transition-all hover:scale-[1.02] active:scale-95`}>
+            {quickActions.map((action, idx) => (
+              <button
+                key={idx}
+                onClick={() => router.push(action.route)}
+                className={`${action.color} text-white rounded-lg p-4 text-left transition-all hover:scale-[1.02] active:scale-95 cursor-pointer`}
+              >
                 <p className="font-semibold text-sm">{action.label}</p>
                 <p className="text-xs opacity-80 mt-1">{action.desc}</p>
               </button>
