@@ -127,9 +127,14 @@ body {
 }
 .badge-blue { background: #dbeafe; color: #1d4ed8; }
 .badge-green { background: #dcfce7; color: #16a34a; }
-.badge-red { background: #fee2e2; color: #dc2626; }
+.badge-red { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
 .badge-amber { background: #fef3c7; color: #d97706; }
 .badge-purple { background: #f3e8ff; color: #7c3aed; }
+.badge-teal { background: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; }
+.badge-rose { background: #ffe4e6; color: #e11d48; border: 1px solid #fecdd3; }
+.badge-indigo { background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; }
+.badge-cyan { background: #cffafe; color: #0e7490; border: 1px solid #a5f3fc; }
+.badge-slate { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
 
 /* Button styles */
 .btn {

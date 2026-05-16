@@ -15,6 +15,10 @@ export interface HospitalSettings {
   receptionCanCollectUltrasound: boolean;
   currency: string;
   receiptFooter: string;
+  roomChargesPerNight: number;
+  wardChargesPerDay: number;
+  hospitalCutRatio: number; // percentage, e.g. 40 means 40%
+  admissionFee: number; // default admission fee
 }
 
 export interface User {
@@ -105,12 +109,16 @@ export interface Prescription {
 
 export interface PrescriptionMedicine {
   name: string;
-  dosage: string;
+  form: string;
+  strength: string;
+  qtyPerDay: string;
+  timing: string;
   duration: string;
-  frequency: string;
   instructions: string;
   price: number;
   selected: boolean;
+  dosage?: string;
+  frequency?: string;
 }
 
 export interface DispenseRecord {
@@ -199,11 +207,60 @@ export interface Admission {
   patientName: string;
   department: string;
   doctor: string;
+  doctorFee: number;
   admissionDate: string;
+  admittedAt: string; // date when actually admitted by reception
+  dischargedAt: string; // date when discharged
   purpose: string;
   roomNo: string;
+  roomTypeId: string; // room type ID for charge calculation
+  roomChargesPerNight: number; // snapshot of room charges at admit time
   status: 'Approved' | 'Admitted' | 'Discharged';
   notes: string;
   createdAt: string;
   approvedBy: string;
+}
+
+export interface MedicineItem {
+  id: string;
+  name: string;
+  genericName: string;
+  form: 'Tablet' | 'Capsule' | 'Syrup' | 'Injection' | 'Cream' | 'Drops' | 'Inhaler' | 'Powder';
+  strength: string; // e.g. "500mg", "250mg/5ml"
+  packing: string;  // e.g. "10 tablets", "100ml bottle"
+  price: number;
+  category: string; // e.g. "Pain Relief", "Antibiotic"
+  active: boolean;
+}
+
+export interface LabTestCatalog {
+  id: string;
+  testName: string;
+  category: string; // e.g. "Hematology", "Biochemistry"
+  price: number;
+  turnaroundTime: string; // e.g. "2 hours", "24 hours"
+  active: boolean;
+}
+
+export interface RoomType {
+  id: string;
+  name: string; // e.g. "General Ward", "Private Room", "ICU"
+  chargesPerNight: number;
+  active: boolean;
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  fatherName: string;
+  cnic: string;
+  mobile: string;
+  designation: string;
+  department: string;
+  salary: number;
+  joinDate: string;
+  status: 'Active' | 'Inactive' | 'Terminated';
+  documents: string[];
+  bankAccount: string;
+  emergencyContact: string;
 }

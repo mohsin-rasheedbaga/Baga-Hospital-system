@@ -1,5 +1,5 @@
 /* ========== DATA STORE - Offline / LocalStorage ========== */
-import type { Hospital, HospitalSettings, User, Patient, Visit, LabOrder, Prescription, DispenseRecord, Bill, XRayOrder, UltrasoundOrder, Appointment, Admission } from './types';
+import type { Hospital, HospitalSettings, User, Patient, Visit, LabOrder, Prescription, DispenseRecord, Bill, XRayOrder, UltrasoundOrder, Appointment, Admission, MedicineItem, LabTestCatalog, RoomType, Employee } from './types';
 
 const KEYS = {
   hospital: 'baga_hospital',
@@ -16,6 +16,10 @@ const KEYS = {
   patientCounter: 'baga_patient_counter',
   appointments: 'baga_appointments',
   admissions: 'baga_admissions',
+  medicines: 'baga_medicines',
+  labTestCatalog: 'baga_lab_test_catalog',
+  roomTypes: 'baga_room_types',
+  employees: 'baga_employees',
 };
 
 /* ========== Generic Helpers ========== */
@@ -49,6 +53,10 @@ const defaultSettings: HospitalSettings = {
   receptionCanCollectUltrasound: true,
   currency: 'Rs.',
   receiptFooter: 'Thank you for choosing BAGA Hospital. Get well soon!',
+  roomChargesPerNight: 1500,
+  wardChargesPerDay: 1000,
+  hospitalCutRatio: 40,
+  admissionFee: 2000,
 };
 
 export function getHospitalSettings(): HospitalSettings { return get(KEYS.hospitalSettings, defaultSettings); }
@@ -162,20 +170,20 @@ const defaultPrescriptions: Prescription[] = [
   {
     id: 'pr1', visitId: 'v1', patientId: 'p1', patientNo: 'BAGA-0001', patientName: 'Muhammad Ali',
     medicines: [
-      { name: 'Aspirin 75mg', dosage: '1 tablet', duration: '7 days', frequency: 'Once daily', instructions: 'After breakfast', price: 150, selected: true },
-      { name: 'Clopidogrel 75mg', dosage: '1 tablet', duration: '7 days', frequency: 'Once daily', instructions: 'After lunch', price: 350, selected: true },
-      { name: 'Atorvastatin 20mg', dosage: '1 tablet', duration: '30 days', frequency: 'Once daily', instructions: 'At bedtime', price: 600, selected: true },
-      { name: 'Metoprolol 50mg', dosage: '1 tablet', duration: '7 days', frequency: 'Twice daily', instructions: 'After meals', price: 400, selected: true },
-      { name: 'Omeprazole 20mg', dosage: '1 capsule', duration: '14 days', frequency: 'Once daily', instructions: 'Empty stomach morning', price: 200, selected: true },
+      { name: 'Aspirin', form: 'Tablet', strength: '75mg', qtyPerDay: '1', timing: 'After Breakfast', duration: '7 days', instructions: 'Take with water', price: 35, selected: true, dosage: '1 tablet', frequency: 'After Breakfast' },
+      { name: 'Clopidogrel', form: 'Tablet', strength: '75mg', qtyPerDay: '1', timing: 'After Lunch', duration: '7 days', instructions: '', price: 180, selected: true, dosage: '1 tablet', frequency: 'After Lunch' },
+      { name: 'Atorvastatin', form: 'Tablet', strength: '20mg', qtyPerDay: '1', timing: 'At Bedtime', duration: '30 days', instructions: '', price: 150, selected: true, dosage: '1 tablet', frequency: 'At Bedtime' },
+      { name: 'Metoprolol', form: 'Tablet', strength: '50mg', qtyPerDay: '1', timing: 'After Meal', duration: '7 days', instructions: 'Do not stop suddenly', price: 90, selected: true, dosage: '1 tablet', frequency: 'Twice daily' },
+      { name: 'Omeprazole', form: 'Capsule', strength: '20mg', qtyPerDay: '1', timing: 'Empty Stomach', duration: '14 days', instructions: 'Take 30 min before breakfast', price: 75, selected: true, dosage: '1 capsule', frequency: 'Empty Stomach' },
     ],
     prescribedBy: 'Dr. Muhammad Ali', date: '2025-05-16', time: '10:00 AM', status: 'Active', notes: 'Complete the full course. Avoid heavy meals.'
   },
   {
     id: 'pr2', visitId: 'v2', patientId: 'p2', patientNo: 'BAGA-0002', patientName: 'Fatima Bibi',
     medicines: [
-      { name: 'Folic Acid 5mg', dosage: '1 tablet', duration: '30 days', frequency: 'Once daily', instructions: 'After breakfast', price: 120, selected: true },
-      { name: 'Iron Supplement', dosage: '1 tablet', duration: '30 days', frequency: 'Once daily', instructions: 'Empty stomach', price: 350, selected: true },
-      { name: 'Calcium + Vitamin D', dosage: '1 tablet', duration: '30 days', frequency: 'Once daily', instructions: 'After lunch', price: 500, selected: true },
+      { name: 'Folic Acid', form: 'Tablet', strength: '5mg', qtyPerDay: '1', timing: 'After Breakfast', duration: '30 days', instructions: '', price: 35, selected: true, dosage: '1 tablet', frequency: 'After Breakfast' },
+      { name: 'Iron Supplement', form: 'Tablet', strength: '200mg', qtyPerDay: '1', timing: 'Empty Stomach', duration: '30 days', instructions: 'Take with orange juice', price: 95, selected: true, dosage: '1 tablet', frequency: 'Empty Stomach' },
+      { name: 'Calcium + Vitamin D', form: 'Tablet', strength: '500mg+200IU', qtyPerDay: '1', timing: 'After Lunch', duration: '30 days', instructions: '', price: 95, selected: true, dosage: '1 tablet', frequency: 'After Lunch' },
     ],
     prescribedBy: 'Dr. Sara Khan', date: '2025-05-16', time: '10:45 AM', status: 'Active', notes: 'Continue prenatal vitamins throughout pregnancy.'
   },
@@ -273,6 +281,183 @@ export function getActiveAdmissions(): Admission[] { return getAdmissions().filt
 export function getNextTokenNo(): number {
   const todayVisits = getVisits().filter(v => v.date === todayStr());
   return todayVisits.length + 1;
+}
+
+/* ========== MEDICINES DATABASE ========== */
+const defaultMedicines: MedicineItem[] = [
+  { id: 'med1', name: 'Paracetamol', genericName: 'Acetaminophen', form: 'Tablet', strength: '500mg', packing: '10 tablets', price: 30, category: 'Pain Relief', active: true },
+  { id: 'med2', name: 'Paracetamol', genericName: 'Acetaminophen', form: 'Syrup', strength: '125mg/5ml', packing: '60ml bottle', price: 85, category: 'Pain Relief', active: true },
+  { id: 'med3', name: 'Ibuprofen', genericName: 'Ibuprofen', form: 'Tablet', strength: '400mg', packing: '10 tablets', price: 45, category: 'Pain Relief', active: true },
+  { id: 'med4', name: 'Ibuprofen', genericName: 'Ibuprofen', form: 'Syrup', strength: '100mg/5ml', packing: '60ml bottle', price: 95, category: 'Pain Relief', active: true },
+  { id: 'med5', name: 'Amoxicillin', genericName: 'Amoxicillin', form: 'Capsule', strength: '250mg', packing: '10 capsules', price: 65, category: 'Antibiotic', active: true },
+  { id: 'med6', name: 'Amoxicillin', genericName: 'Amoxicillin', form: 'Capsule', strength: '500mg', packing: '10 capsules', price: 110, category: 'Antibiotic', active: true },
+  { id: 'med7', name: 'Azithromycin', genericName: 'Azithromycin', form: 'Tablet', strength: '500mg', packing: '3 tablets', price: 120, category: 'Antibiotic', active: true },
+  { id: 'med8', name: 'Ciprofloxacin', genericName: 'Ciprofloxacin', form: 'Tablet', strength: '500mg', packing: '10 tablets', price: 90, category: 'Antibiotic', active: true },
+  { id: 'med9', name: 'Metronidazole', genericName: 'Metronidazole', form: 'Tablet', strength: '400mg', packing: '10 tablets', price: 55, category: 'Antibiotic', active: true },
+  { id: 'med10', name: 'Omeprazole', genericName: 'Omeprazole', form: 'Capsule', strength: '20mg', packing: '10 capsules', price: 75, category: 'Gastrointestinal', active: true },
+  { id: 'med11', name: 'Pantoprazole', genericName: 'Pantoprazole', form: 'Tablet', strength: '40mg', packing: '10 tablets', price: 95, category: 'Gastrointestinal', active: true },
+  { id: 'med12', name: 'Ranitidine', genericName: 'Ranitidine', form: 'Tablet', strength: '150mg', packing: '10 tablets', price: 60, category: 'Gastrointestinal', active: true },
+  { id: 'med13', name: 'Domperidone', genericName: 'Domperidone', form: 'Tablet', strength: '10mg', packing: '10 tablets', price: 50, category: 'Gastrointestinal', active: true },
+  { id: 'med14', name: 'Antacid Suspension', genericName: 'Aluminium/Magnesium Hydroxide', form: 'Syrup', strength: '200mg/200mg/5ml', packing: '170ml bottle', price: 110, category: 'Gastrointestinal', active: true },
+  { id: 'med15', name: 'Cetirizine', genericName: 'Cetirizine', form: 'Tablet', strength: '10mg', packing: '10 tablets', price: 40, category: 'Antihistamine', active: true },
+  { id: 'med16', name: 'Loratadine', genericName: 'Loratadine', form: 'Tablet', strength: '10mg', packing: '10 tablets', price: 55, category: 'Antihistamine', active: true },
+  { id: 'med17', name: 'Metformin', genericName: 'Metformin', form: 'Tablet', strength: '500mg', packing: '10 tablets', price: 45, category: 'Antidiabetic', active: true },
+  { id: 'med18', name: 'Metformin', genericName: 'Metformin', form: 'Tablet', strength: '850mg', packing: '10 tablets', price: 65, category: 'Antidiabetic', active: true },
+  { id: 'med19', name: 'Glimepiride', genericName: 'Glimepiride', form: 'Tablet', strength: '2mg', packing: '10 tablets', price: 80, category: 'Antidiabetic', active: true },
+  { id: 'med20', name: 'Amlodipine', genericName: 'Amlodipine', form: 'Tablet', strength: '5mg', packing: '10 tablets', price: 55, category: 'Antihypertensive', active: true },
+  { id: 'med21', name: 'Amlodipine', genericName: 'Amlodipine', form: 'Tablet', strength: '10mg', packing: '10 tablets', price: 85, category: 'Antihypertensive', active: true },
+  { id: 'med22', name: 'Losartan', genericName: 'Losartan', form: 'Tablet', strength: '50mg', packing: '10 tablets', price: 90, category: 'Antihypertensive', active: true },
+  { id: 'med23', name: 'Enalapril', genericName: 'Enalapril', form: 'Tablet', strength: '5mg', packing: '10 tablets', price: 65, category: 'Antihypertensive', active: true },
+  { id: 'med24', name: 'Aspirin', genericName: 'Aspirin', form: 'Tablet', strength: '75mg', packing: '30 tablets', price: 35, category: 'Cardiac', active: true },
+  { id: 'med25', name: 'Aspirin', genericName: 'Aspirin', form: 'Tablet', strength: '300mg', packing: '10 tablets', price: 25, category: 'Pain Relief', active: true },
+  { id: 'med26', name: 'Clopidogrel', genericName: 'Clopidogrel', form: 'Tablet', strength: '75mg', packing: '10 tablets', price: 180, category: 'Cardiac', active: true },
+  { id: 'med27', name: 'Atorvastatin', genericName: 'Atorvastatin', form: 'Tablet', strength: '10mg', packing: '10 tablets', price: 90, category: 'Cardiac', active: true },
+  { id: 'med28', name: 'Atorvastatin', genericName: 'Atorvastatin', form: 'Tablet', strength: '20mg', packing: '10 tablets', price: 150, category: 'Cardiac', active: true },
+  { id: 'med29', name: 'Atorvastatin', genericName: 'Atorvastatin', form: 'Tablet', strength: '40mg', packing: '10 tablets', price: 250, category: 'Cardiac', active: true },
+  { id: 'med30', name: 'Salbutamol Inhaler', genericName: 'Albuterol', form: 'Inhaler', strength: '100mcg/dose', packing: '200 doses', price: 350, category: 'Respiratory', active: true },
+  { id: 'med31', name: 'Montelukast', genericName: 'Montelukast', form: 'Tablet', strength: '10mg', packing: '10 tablets', price: 120, category: 'Respiratory', active: true },
+  { id: 'med32', name: 'Diclofenac', genericName: 'Diclofenac Sodium', form: 'Tablet', strength: '50mg', packing: '10 tablets', price: 35, category: 'Pain Relief', active: true },
+  { id: 'med33', name: 'Diclofenac Gel', genericName: 'Diclofenac Diethylamine', form: 'Cream', strength: '1%', packing: '30g tube', price: 120, category: 'Pain Relief', active: true },
+  { id: 'med34', name: 'Naproxen', genericName: 'Naproxen', form: 'Tablet', strength: '250mg', packing: '10 tablets', price: 55, category: 'Pain Relief', active: true },
+  { id: 'med35', name: 'Tramadol', genericName: 'Tramadol', form: 'Capsule', strength: '50mg', packing: '10 capsules', price: 80, category: 'Pain Relief', active: true },
+  { id: 'med36', name: 'ORS', genericName: 'Oral Rehydration Salts', form: 'Powder', strength: '20.5g/sachet', packing: '1 sachet', price: 25, category: 'Electrolyte', active: true },
+  { id: 'med37', name: 'Vitamin C', genericName: 'Ascorbic Acid', form: 'Tablet', strength: '500mg', packing: '10 tablets', price: 40, category: 'Vitamin', active: true },
+  { id: 'med38', name: 'Multivitamin', genericName: 'Multivitamin', form: 'Tablet', strength: '', packing: '10 tablets', price: 85, category: 'Vitamin', active: true },
+  { id: 'med39', name: 'Calcium + Vitamin D', genericName: 'Calcium Carbonate + Vit D3', form: 'Tablet', strength: '500mg+200IU', packing: '10 tablets', price: 95, category: 'Vitamin', active: true },
+  { id: 'med40', name: 'Vitamin D3', genericName: 'Cholecalciferol', form: 'Capsule', strength: '60000 IU', packing: '4 capsules', price: 130, category: 'Vitamin', active: true },
+  { id: 'med41', name: 'Iron Supplement', genericName: 'Ferrous Fumarate', form: 'Tablet', strength: '200mg', packing: '30 tablets', price: 95, category: 'Vitamin', active: true },
+  { id: 'med42', name: 'Folic Acid', genericName: 'Folic Acid', form: 'Tablet', strength: '5mg', packing: '30 tablets', price: 35, category: 'Vitamin', active: true },
+  { id: 'med43', name: 'Vitamin B12', genericName: 'Cyanocobalamin', form: 'Tablet', strength: '500mcg', packing: '10 tablets', price: 55, category: 'Vitamin', active: true },
+  { id: 'med44', name: 'Vitamin B Complex', genericName: 'Vitamin B Complex', form: 'Tablet', strength: '', packing: '10 tablets', price: 50, category: 'Vitamin', active: true },
+  { id: 'med45', name: 'Cephalexin', genericName: 'Cephalexin', form: 'Capsule', strength: '500mg', packing: '10 capsules', price: 110, category: 'Antibiotic', active: true },
+  { id: 'med46', name: 'Doxycycline', genericName: 'Doxycycline', form: 'Capsule', strength: '100mg', packing: '10 capsules', price: 85, category: 'Antibiotic', active: true },
+  { id: 'med47', name: 'Ceftriaxone', genericName: 'Ceftriaxone', form: 'Injection', strength: '1g', packing: '1 vial', price: 180, category: 'Antibiotic', active: true },
+  { id: 'med48', name: 'Ceftriaxone', genericName: 'Ceftriaxone', form: 'Injection', strength: '2g', packing: '1 vial', price: 320, category: 'Antibiotic', active: true },
+  { id: 'med49', name: 'Ampicillin', genericName: 'Ampicillin', form: 'Injection', strength: '500mg', packing: '1 vial', price: 65, category: 'Antibiotic', active: true },
+  { id: 'med50', name: 'Gentamicin', genericName: 'Gentamicin', form: 'Injection', strength: '80mg/2ml', packing: '1 ampoule', price: 45, category: 'Antibiotic', active: true },
+  { id: 'med51', name: 'Diclofenac', genericName: 'Diclofenac Sodium', form: 'Injection', strength: '75mg/3ml', packing: '1 ampoule', price: 55, category: 'Pain Relief', active: true },
+  { id: 'med52', name: 'Metformin', genericName: 'Metformin', form: 'Tablet', strength: '1000mg', packing: '10 tablets', price: 90, category: 'Antidiabetic', active: true },
+  { id: 'med53', name: 'Insulin Glargine', genericName: 'Insulin Glargine', form: 'Injection', strength: '100IU/ml', packing: '10ml vial', price: 2500, category: 'Antidiabetic', active: true },
+  { id: 'med54', name: 'Insulin Mixtard', genericName: 'Biphasic Isophane', form: 'Injection', strength: '100IU/ml', packing: '10ml vial', price: 1800, category: 'Antidiabetic', active: true },
+  { id: 'med55', name: 'Nifedipine', genericName: 'Nifedipine', form: 'Tablet', strength: '10mg', packing: '10 tablets', price: 45, category: 'Antihypertensive', active: true },
+  { id: 'med56', name: 'Hydrochlorothiazide', genericName: 'HCTZ', form: 'Tablet', strength: '25mg', packing: '10 tablets', price: 30, category: 'Antihypertensive', active: true },
+  { id: 'med57', name: 'Furosemide', genericName: 'Furosemide', form: 'Tablet', strength: '40mg', packing: '10 tablets', price: 35, category: 'Antihypertensive', active: true },
+  { id: 'med58', name: 'Spironolactone', genericName: 'Spironolactone', form: 'Tablet', strength: '25mg', packing: '10 tablets', price: 50, category: 'Antihypertensive', active: true },
+  { id: 'med59', name: 'Digoxin', genericName: 'Digoxin', form: 'Tablet', strength: '0.25mg', packing: '10 tablets', price: 70, category: 'Cardiac', active: true },
+  { id: 'med60', name: 'Warfarin', genericName: 'Warfarin', form: 'Tablet', strength: '5mg', packing: '10 tablets', price: 120, category: 'Cardiac', active: true },
+  { id: 'med61', name: 'Nitroglycerin', genericName: 'Glyceryl Trinitrate', form: 'Tablet', strength: '0.5mg', packing: '20 tablets', price: 150, category: 'Cardiac', active: true },
+  { id: 'med62', name: 'Alprazolam', genericName: 'Alprazolam', form: 'Tablet', strength: '0.25mg', packing: '10 tablets', price: 40, category: 'Sedative', active: true },
+  { id: 'med63', name: 'Diazepam', genericName: 'Diazepam', form: 'Tablet', strength: '5mg', packing: '10 tablets', price: 45, category: 'Sedative', active: true },
+  { id: 'med64', name: 'Promethazine', genericName: 'Promethazine', form: 'Tablet', strength: '25mg', packing: '10 tablets', price: 35, category: 'Antihistamine', active: true },
+  { id: 'med65', name: 'Chlorpheniramine', genericName: 'Chlorpheniramine', form: 'Tablet', strength: '4mg', packing: '10 tablets', price: 20, category: 'Antihistamine', active: true },
+  { id: 'med66', name: 'Prednisolone', genericName: 'Prednisolone', form: 'Tablet', strength: '5mg', packing: '10 tablets', price: 40, category: 'Steroid', active: true },
+  { id: 'med67', name: 'Dexamethasone', genericName: 'Dexamethasone', form: 'Tablet', strength: '4mg', packing: '10 tablets', price: 50, category: 'Steroid', active: true },
+  { id: 'med68', name: 'Dexamethasone', genericName: 'Dexamethasone', form: 'Injection', strength: '4mg/ml', packing: '1 ampoule', price: 35, category: 'Steroid', active: true },
+  { id: 'med69', name: 'Hydrocortisone', genericName: 'Hydrocortisone', form: 'Cream', strength: '1%', packing: '30g tube', price: 140, category: 'Steroid', active: true },
+  { id: 'med70', name: 'Betamethasone Cream', genericName: 'Betamethasone', form: 'Cream', strength: '0.05%', packing: '20g tube', price: 100, category: 'Steroid', active: true },
+  { id: 'med71', name: 'Clotrimazole Cream', genericName: 'Clotrimazole', form: 'Cream', strength: '1%', packing: '20g tube', price: 85, category: 'Antifungal', active: true },
+  { id: 'med72', name: 'Fluconazole', genericName: 'Fluconazole', form: 'Tablet', strength: '150mg', packing: '1 tablet', price: 130, category: 'Antifungal', active: true },
+  { id: 'med73', name: 'Acyclovir', genericName: 'Acyclovir', form: 'Tablet', strength: '400mg', packing: '10 tablets', price: 150, category: 'Antiviral', active: true },
+  { id: 'med74', name: 'Albendazole', genericName: 'Albendazole', form: 'Tablet', strength: '400mg', packing: '1 tablet', price: 45, category: 'Antiparasitic', active: true },
+  { id: 'med75', name: 'Metoprolol', genericName: 'Metoprolol', form: 'Tablet', strength: '50mg', packing: '10 tablets', price: 90, category: 'Cardiac', active: true },
+  { id: 'med76', name: 'Carvedilol', genericName: 'Carvedilol', form: 'Tablet', strength: '6.25mg', packing: '10 tablets', price: 130, category: 'Cardiac', active: true },
+  { id: 'med77', name: 'Ondansetron', genericName: 'Ondansetron', form: 'Tablet', strength: '4mg', packing: '10 tablets', price: 120, category: 'Gastrointestinal', active: true },
+  { id: 'med78', name: 'Ondansetron', genericName: 'Ondansetron', form: 'Injection', strength: '4mg/2ml', packing: '1 ampoule', price: 80, category: 'Gastrointestinal', active: true },
+  { id: 'med79', name: 'Loperamide', genericName: 'Loperamide', form: 'Capsule', strength: '2mg', packing: '10 capsules', price: 45, category: 'Gastrointestinal', active: true },
+  { id: 'med80', name: 'Sucralfate', genericName: 'Sucralfate', form: 'Tablet', strength: '1g', packing: '10 tablets', price: 85, category: 'Gastrointestinal', active: true },
+];
+
+export function getMedicines(): MedicineItem[] { return get(KEYS.medicines, defaultMedicines); }
+export function setMedicines(m: MedicineItem[]): void { set(KEYS.medicines, m); }
+export function addMedicine(m: MedicineItem): void { const all = getMedicines(); all.push(m); setMedicines(all); }
+export function updateMedicine(id: string, data: Partial<MedicineItem>): void { setMedicines(getMedicines().map(m => m.id === id ? { ...m, ...data } : m)); }
+export function deleteMedicine(id: string): void { setMedicines(getMedicines().filter(m => m.id !== id)); }
+export function searchMedicines(q: string): MedicineItem[] {
+  const lq = q.toLowerCase();
+  return getMedicines().filter(m => m.active && (m.name.toLowerCase().includes(lq) || m.genericName.toLowerCase().includes(lq) || m.category.toLowerCase().includes(lq)));
+}
+export function getMedicineCategories(): string[] { return [...new Set(getMedicines().filter(m => m.active).map(m => m.category))]; }
+
+/* ========== LAB TEST CATALOG ========== */
+const defaultLabTests: LabTestCatalog[] = [
+  { id: 'lt1', testName: 'CBC (Complete Blood Count)', category: 'Hematology', price: 800, turnaroundTime: '2 hours', active: true },
+  { id: 'lt2', testName: 'Blood Group & Rh Factor', category: 'Hematology', price: 500, turnaroundTime: '1 hour', active: true },
+  { id: 'lt3', testName: 'Hemoglobin (Hb)', category: 'Hematology', price: 400, turnaroundTime: '1 hour', active: true },
+  { id: 'lt4', testName: 'ESR', category: 'Hematology', price: 300, turnaroundTime: '1 hour', active: true },
+  { id: 'lt5', testName: 'Blood Sugar Fasting', category: 'Biochemistry', price: 400, turnaroundTime: '2 hours', active: true },
+  { id: 'lt6', testName: 'Blood Sugar Random', category: 'Biochemistry', price: 400, turnaroundTime: '2 hours', active: true },
+  { id: 'lt7', testName: 'HbA1c', category: 'Biochemistry', price: 1200, turnaroundTime: '4 hours', active: true },
+  { id: 'lt8', testName: 'Liver Function Test (LFT)', category: 'Biochemistry', price: 1500, turnaroundTime: '4 hours', active: true },
+  { id: 'lt9', testName: 'Kidney Function Test (KFT)', category: 'Biochemistry', price: 1200, turnaroundTime: '4 hours', active: true },
+  { id: 'lt10', testName: 'Lipid Profile', category: 'Biochemistry', price: 1200, turnaroundTime: '4 hours', active: true },
+  { id: 'lt11', testName: 'Uric Acid', category: 'Biochemistry', price: 500, turnaroundTime: '2 hours', active: true },
+  { id: 'lt12', testName: 'CRP', category: 'Biochemistry', price: 600, turnaroundTime: '2 hours', active: true },
+  { id: 'lt13', testName: 'Thyroid Panel (T3, T4, TSH)', category: 'Biochemistry', price: 1800, turnaroundTime: '6 hours', active: true },
+  { id: 'lt14', testName: 'Electrolytes (Na, K, Cl)', category: 'Biochemistry', price: 800, turnaroundTime: '2 hours', active: true },
+  { id: 'lt15', testName: 'Calcium', category: 'Biochemistry', price: 500, turnaroundTime: '2 hours', active: true },
+  { id: 'lt16', testName: 'Vitamin D', category: 'Biochemistry', price: 1500, turnaroundTime: '24 hours', active: true },
+  { id: 'lt17', testName: 'Iron Studies', category: 'Biochemistry', price: 1000, turnaroundTime: '4 hours', active: true },
+  { id: 'lt18', testName: 'PT/INR', category: 'Hematology', price: 700, turnaroundTime: '2 hours', active: true },
+  { id: 'lt19', testName: 'D-Dimer', category: 'Hematology', price: 1500, turnaroundTime: '4 hours', active: true },
+  { id: 'lt20', testName: 'HIV', category: 'Serology', price: 800, turnaroundTime: '24 hours', active: true },
+  { id: 'lt21', testName: 'Hepatitis B', category: 'Serology', price: 800, turnaroundTime: '24 hours', active: true },
+  { id: 'lt22', testName: 'Hepatitis C', category: 'Serology', price: 800, turnaroundTime: '24 hours', active: true },
+  { id: 'lt23', testName: 'Dengue NS1', category: 'Serology', price: 1200, turnaroundTime: '24 hours', active: true },
+  { id: 'lt24', testName: 'Dengue IgM/IgG', category: 'Serology', price: 1500, turnaroundTime: '24 hours', active: true },
+  { id: 'lt25', testName: 'Urine Routine Examination', category: 'Urinalysis', price: 300, turnaroundTime: '2 hours', active: true },
+  { id: 'lt26', testName: 'Urine Culture', category: 'Urinalysis', price: 800, turnaroundTime: '48 hours', active: true },
+  { id: 'lt27', testName: 'Blood Culture', category: 'Microbiology', price: 1000, turnaroundTime: '72 hours', active: true },
+  { id: 'lt28', testName: 'Troponin T', category: 'Cardiac Markers', price: 1800, turnaroundTime: '2 hours', active: true },
+  { id: 'lt29', testName: 'CK-MB', category: 'Cardiac Markers', price: 1000, turnaroundTime: '2 hours', active: true },
+  { id: 'lt30', testName: 'Procalcitonin', category: 'Biochemistry', price: 2000, turnaroundTime: '4 hours', active: true },
+];
+
+export function getLabTestCatalog(): LabTestCatalog[] { return get(KEYS.labTestCatalog, defaultLabTests); }
+export function setLabTestCatalog(t: LabTestCatalog[]): void { set(KEYS.labTestCatalog, t); }
+export function addLabTest(t: LabTestCatalog): void { const all = getLabTestCatalog(); all.push(t); setLabTestCatalog(all); }
+export function updateLabTest(id: string, data: Partial<LabTestCatalog>): void { setLabTestCatalog(getLabTestCatalog().map(t => t.id === id ? { ...t, ...data } : t)); }
+export function deleteLabTest(id: string): void { setLabTestCatalog(getLabTestCatalog().filter(t => t.id !== id)); }
+export function searchLabTests(q: string): LabTestCatalog[] {
+  const lq = q.toLowerCase();
+  return getLabTestCatalog().filter(t => t.active && (t.testName.toLowerCase().includes(lq) || t.category.toLowerCase().includes(lq)));
+}
+export function getLabTestCategories(): string[] { return [...new Set(getLabTestCatalog().filter(t => t.active).map(t => t.category))]; }
+
+/* ========== ROOM TYPES ========== */
+const defaultRoomTypes: RoomType[] = [
+  { id: 'rt1', name: 'General Ward', chargesPerNight: 1500, active: true },
+  { id: 'rt2', name: 'Semi-Private Room', chargesPerNight: 3000, active: true },
+  { id: 'rt3', name: 'Private Room', chargesPerNight: 5000, active: true },
+  { id: 'rt4', name: 'VIP Room', chargesPerNight: 10000, active: true },
+  { id: 'rt5', name: 'ICU', chargesPerNight: 15000, active: true },
+  { id: 'rt6', name: 'CCU', chargesPerNight: 15000, active: true },
+  { id: 'rt7', name: 'Operation Theater', chargesPerNight: 20000, active: true },
+  { id: 'rt8', name: 'Emergency Ward', chargesPerNight: 2000, active: true },
+];
+
+export function getRoomTypes(): RoomType[] { return get(KEYS.roomTypes, defaultRoomTypes); }
+export function setRoomTypes(r: RoomType[]): void { set(KEYS.roomTypes, r); }
+export function addRoomType(r: RoomType): void { const all = getRoomTypes(); all.push(r); setRoomTypes(all); }
+export function updateRoomType(id: string, data: Partial<RoomType>): void { setRoomTypes(getRoomTypes().map(r => r.id === id ? { ...r, ...data } : r)); }
+export function deleteRoomType(id: string): void { setRoomTypes(getRoomTypes().filter(r => r.id !== id)); }
+export function getRoomTypeById(id: string): RoomType | undefined { return getRoomTypes().find(r => r.id === id); }
+export function getActiveRoomTypes(): RoomType[] { return getRoomTypes().filter(r => r.active); }
+
+/* ========== EMPLOYEES (HR) ========== */
+const defaultEmployees: Employee[] = [
+  { id: 'e1', name: 'Dr. Ahmed Hassan', fatherName: 'Hassan Ali', cnic: '35201-1234567-1', mobile: '03001234567', designation: 'Medical Officer', department: 'Emergency', salary: 150000, joinDate: '2024-01-15', status: 'Active', documents: ['CNIC', 'PMDC Certificate', 'CV'], bankAccount: 'IBAN-1234567890', emergencyContact: '03009876543' },
+  { id: 'e2', name: 'Dr. Sara Khan', fatherName: 'Khan Muhammad', cnic: '35201-7654321-1', mobile: '03119876543', designation: 'Gynecologist', department: 'Gynecology', salary: 200000, joinDate: '2024-02-01', status: 'Active', documents: ['CNIC', 'PMDC Certificate'], bankAccount: 'IBAN-0987654321', emergencyContact: '03118765432' },
+  { id: 'e3', name: 'Nurse Fatima', fatherName: 'Muhammad Akram', cnic: '35201-9876543-1', mobile: '03234567890', designation: 'Staff Nurse', department: 'General Ward', salary: 60000, joinDate: '2024-03-10', status: 'Active', documents: ['CNIC', 'Nursing License'], bankAccount: 'IBAN-5678901234', emergencyContact: '03234567891' },
+];
+
+export function getEmployees(): Employee[] { return get(KEYS.employees, defaultEmployees); }
+export function setEmployees(e: Employee[]): void { set(KEYS.employees, e); }
+export function addEmployee(e: Employee): void { const all = getEmployees(); all.push(e); setEmployees(all); }
+export function updateEmployee(id: string, data: Partial<Employee>): void { setEmployees(getEmployees().map(e => e.id === id ? { ...e, ...data } : e)); }
+export function deleteEmployee(id: string): void { setEmployees(getEmployees().filter(e => e.id !== id)); }
+export function searchEmployees(q: string): Employee[] {
+  const lq = q.toLowerCase();
+  return getEmployees().filter(e => e.name.toLowerCase().includes(lq) || e.department.toLowerCase().includes(lq) || e.designation.toLowerCase().includes(lq));
 }
 
 /* ========== UTILITY ========== */

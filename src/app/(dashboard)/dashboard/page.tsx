@@ -5,7 +5,7 @@ import {
   getVisits, getLabOrders, getXRayOrders, getUltrasoundOrders,
   getPrescriptions, getBills, getPatients, getActiveAdmissions,
   getPendingLabOrders, getPendingXRayOrders, getPendingUltrasoundOrders,
-  getDispenses, getAdmissions, todayStr
+  getDispenses, getAdmissions, todayStr, getHospitalSettings
 } from '@/lib/store';
 
 interface Session {
@@ -53,7 +53,7 @@ export default function DashboardPage() {
   const activeAdmissions = allAdmissions.filter(a => a.status === 'Admitted');
   const pendingPrescriptions = allPrescriptions.filter(p => p.status === 'Active');
 
-  const currency = 'Rs.';
+  const currency = getHospitalSettings().currency;
 
   /* =========== HOSPITAL CUT RATIO (demo) =========== */
   const hospitalCutRatio = 0.4; // 40% hospital, 60% doctor
@@ -71,13 +71,13 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Aaj Ke MAREEZ" value={todayVisits.length} sub="OPD Patients Today" color="blue" />
-          <StatCard label="Mahane MAREEZ" value={monthVisits.length} sub="This Month Total" color="emerald" />
-          <StatCard label="Aaj Ki KAMAI" value={`${currency} ${todayRevenue.toLocaleString()}`} sub="Today Revenue" color="amber" />
-          <StatCard label="Mahane KAMAI" value={`${currency} ${monthRevenue.toLocaleString()}`} sub="This Month Revenue" color="purple" />
+          <StatCard label="Today's Patients" value={todayVisits.length} sub="OPD Patients Today" color="blue" />
+          <StatCard label="Monthly Patients" value={monthVisits.length} sub="This Month Total" color="emerald" />
+          <StatCard label="Today's Revenue" value={`${currency} ${todayRevenue.toLocaleString()}`} sub="Today Revenue" color="amber" />
+          <StatCard label="Monthly Revenue" value={`${currency} ${monthRevenue.toLocaleString()}`} sub="This Month Revenue" color="purple" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Kul MAREEZ" value={allPatients.length} sub="Total Registered" color="cyan" />
+          <StatCard label="Total Patients" value={allPatients.length} sub="Total Registered" color="cyan" />
           <StatCard label="PENDING BILLS" value={pendingBills.length} sub={`${currency} ${pendingAmount.toLocaleString()} pending`} color="rose" />
           <StatCard label="PENDING LAB TESTS" value={pendingLab.length} sub="Awaiting results" color="teal" onClick={() => router.push('/lab')} />
           <StatCard label="ACTIVE ADMISSIONS" value={activeAdmissions.length} sub="Currently admitted" color="indigo" onClick={() => router.push('/admission')} />
@@ -85,7 +85,7 @@ export default function DashboardPage() {
 
         {/* Department Status */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Department Status - Aaj</h2>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">Department Status - Today</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <DeptCard name="Reception" count={todayVisits.length} sub="patients today" color="blue" />
             <DeptCard name="Laboratory" count={pendingLab.length} sub="pending tests" color="teal" />
@@ -98,7 +98,7 @@ export default function DashboardPage() {
 
         {/* Recent Visits */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Aaj Ke Recent Visits</h2>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">Today's Recent Visits</h2>
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead><tr><th>Patient No</th><th>Name</th><th>Department</th><th>Doctor</th><th>Token</th><th>Time</th><th>Status</th></tr></thead>
@@ -111,7 +111,7 @@ export default function DashboardPage() {
                     <td><span className={`badge ${v.status==='Active'?'badge-amber':v.status==='Completed'?'badge-green':'badge-blue'}`}>{v.status}</span></td>
                   </tr>
                 ))}
-                {todayVisits.length===0 && <tr><td colSpan={7} className="text-center py-8 text-slate-400">Aaj koi visit nahi hai</td></tr>}
+                {todayVisits.length===0 && <tr><td colSpan={7} className="text-center py-8 text-slate-400">No visits today</td></tr>}
               </tbody>
             </table>
           </div>
@@ -135,19 +135,19 @@ export default function DashboardPage() {
       <div className="space-y-6">
         {/* Today Quick Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="AAJ KE MAREEZ" value={todayVisits.length} sub="Aaj OPD mein aaye" color="blue" />
-          <StatCard label="AAJ KI KAMAI" value={`${currency} ${todayRevenue.toLocaleString()}`} sub="Today Collection" color="emerald" />
+          <StatCard label="Today's Patients" value={todayVisits.length} sub="OPD patients today" color="blue" />
+          <StatCard label="Today's Collection" value={`${currency} ${todayRevenue.toLocaleString()}`} sub="Today Collection" color="emerald" />
           <StatCard label="PENDING LAB TESTS" value={pendingLab.length} sub="Click to view status" color="teal" onClick={() => router.push('/lab')} />
           <StatCard label="PENDING X-RAY" value={pendingXRay.length} sub="Click to view" color="rose" onClick={() => router.push('/xray')} />
         </div>
 
         {/* Monthly Stats */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Mahane Haal (Monthly Summary)</h2>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">Monthly Summary</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <StatCard label="MAHANE MAREEZ" value={monthVisits.length} sub="Is mahine total" color="cyan" />
-            <StatCard label="MAHANE KAMAI" value={`${currency} ${monthRevenue.toLocaleString()}`} sub="Mahana collection" color="amber" />
-            <StatCard label="MAHANE BAAQI" value={`${currency} ${monthPending.toLocaleString()}`} sub="Pending / Unpaid" color="rose" />
+            <StatCard label="Monthly Patients" value={monthVisits.length} sub="This month total" color="cyan" />
+            <StatCard label="Monthly Collection" value={`${currency} ${monthRevenue.toLocaleString()}`} sub="This month collection" color="amber" />
+            <StatCard label="Monthly Pending" value={`${currency} ${monthPending.toLocaleString()}`} sub="Pending / Unpaid" color="rose" />
           </div>
         </div>
 
@@ -158,7 +158,7 @@ export default function DashboardPage() {
             <span className="badge badge-teal">Click to View</span>
           </div>
           {pendingLab.length === 0 ? (
-            <p className="text-slate-400 text-center py-4">Koi pending lab test nahi</p>
+            <p className="text-slate-400 text-center py-4">No pending lab tests</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="data-table">
@@ -181,7 +181,7 @@ export default function DashboardPage() {
 
         {/* Today's Visit List */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Aaj Ke Visits</h2>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">Today's Visits</h2>
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead><tr><th>Patient No</th><th>Name</th><th>Department</th><th>Doctor</th><th>Token</th><th>Time</th><th>Status</th></tr></thead>
@@ -194,7 +194,7 @@ export default function DashboardPage() {
                     <td><span className={`badge ${v.status==='Active'?'badge-amber':v.status==='Completed'?'badge-green':'badge-blue'}`}>{v.status}</span></td>
                   </tr>
                 ))}
-                {todayVisits.length===0 && <tr><td colSpan={7} className="text-center py-8 text-slate-400">Aaj koi visit nahi hai</td></tr>}
+                {todayVisits.length===0 && <tr><td colSpan={7} className="text-center py-8 text-slate-400">No visits today</td></tr>}
               </tbody>
             </table>
           </div>
@@ -252,28 +252,28 @@ export default function DashboardPage() {
 
         {/* Today's OPD Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="AAJ KE MAREEZ" value={myTodayVisits.length} sub="Aaj aaye hue" color="blue" />
-          <StatCard label="CHECK KIYE" value={myChecked.length} sub="Completed today" color="green" />
-          <StatCard label="BAQI HAIN" value={myRemaining.length} sub="Abhi baqi hain" color="amber" />
-          <StatCard label="MAHANE TOTAL" value={myMonthVisits.length} sub="Is mahine ke mareez" color="purple" />
+          <StatCard label="Today's Patients" value={myTodayVisits.length} sub="Came today" color="blue" />
+          <StatCard label="Checked" value={myChecked.length} sub="Completed today" color="green" />
+          <StatCard label="Remaining" value={myRemaining.length} sub="Currently remaining" color="amber" />
+          <StatCard label="Monthly Total" value={myMonthVisits.length} sub="This month's patients" color="purple" />
         </div>
 
         {/* Revenue Section */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Revenue - Mahane Haal (Monthly)</h2>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">Revenue - Monthly Summary</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="KUL FEE" value={`${currency} ${myTotalRevenue.toLocaleString()}`} sub={`Hospital: ${currency} ${myHospitalShare.toLocaleString()} (${Math.round(hospitalCutRatio*100)}%)`} color="cyan" />
-            <StatCard label="AAP KA HISSA" value={`${currency} ${myDoctorShare.toLocaleString()}`} sub={`Your share (${Math.round((1-hospitalCutRatio)*100)}%)`} color="emerald" />
-            <StatCard label="WASOOL KIYE" value={`${currency} ${myCollected.toLocaleString()}`} sub="Collected from hospital" color="blue" />
-            <StatCard label="PENDING" value={`${currency} ${myPendingAmount.toLocaleString()}`} sub="Hospital se lene baqi" color="rose" />
+            <StatCard label="Total Fee" value={`${currency} ${myTotalRevenue.toLocaleString()}`} sub={`Hospital Cut: ${currency} ${myHospitalShare.toLocaleString()} (${Math.round(hospitalCutRatio*100)}%)`} color="cyan" />
+            <StatCard label="Your Share" value={`${currency} ${myDoctorShare.toLocaleString()}`} sub={`Your share (${Math.round((1-hospitalCutRatio)*100)}%)`} color="emerald" />
+            <StatCard label="Collected" value={`${currency} ${myCollected.toLocaleString()}`} sub="Received from hospital" color="blue" />
+            <StatCard label="Pending" value={`${currency} ${myPendingAmount.toLocaleString()}`} sub="Pending from hospital" color="rose" />
           </div>
           {myPendingBills.length > 0 && (
             <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm text-amber-800 font-semibold">Pending Payments Detail:</p>
+              <p className="text-sm text-amber-800 font-semibold">Pending Payments:</p>
               {myPendingBills.map(b => (
                 <div key={b.id} className="flex justify-between text-sm text-amber-700 mt-1">
                   <span>{b.patientName} ({b.patientNo})</span>
-                  <span>{currency} {(b.totalAmount - b.paidAmount).toLocaleString()} baqi</span>
+                  <span>{currency} {(b.totalAmount - b.paidAmount).toLocaleString()} remaining</span>
                 </div>
               ))}
             </div>
@@ -314,7 +314,7 @@ export default function DashboardPage() {
         {/* Today's Patient Queue */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-800">Aaj Ki Queue ({myTodayVisits.length})</h2>
+            <h2 className="text-lg font-semibold text-slate-800">Today's Queue ({myTodayVisits.length})</h2>
             <button onClick={() => router.push('/doctor')} className="btn btn-primary btn-sm">View All Patients</button>
           </div>
           <div className="overflow-x-auto">
@@ -335,7 +335,7 @@ export default function DashboardPage() {
                     </td>
                   </tr>
                 ))}
-                {myTodayVisits.length===0 && <tr><td colSpan={6} className="text-center py-8 text-slate-400">Aaj koi patient nahi aaya</td></tr>}
+                {myTodayVisits.length===0 && <tr><td colSpan={6} className="text-center py-8 text-slate-400">No patient came today</td></tr>}
               </tbody>
             </table>
           </div>
@@ -369,7 +369,7 @@ export default function DashboardPage() {
             <span className="badge badge-teal">Click to Process</span>
           </div>
           {pendingLab.length === 0 ? (
-            <p className="text-slate-400 text-center py-4">Koi pending test nahi hai</p>
+            <p className="text-slate-400 text-center py-4">No pending tests</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="data-table">
@@ -421,7 +421,7 @@ export default function DashboardPage() {
             <span className="badge badge-amber">Click to Dispense</span>
           </div>
           {activeScripts.length === 0 ? (
-            <p className="text-slate-400 text-center py-4">Koi pending prescription nahi</p>
+            <p className="text-slate-400 text-center py-4">No pending prescriptions</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="data-table">
@@ -463,7 +463,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-rose-300" onClick={() => router.push('/xray')}>
           <h2 className="text-lg font-semibold text-slate-800 mb-3">Pending X-Ray Orders ({pendingXRay.length})</h2>
           {pendingXRay.length === 0 ? (
-            <p className="text-slate-400 text-center py-4">Koi pending x-ray nahi</p>
+            <p className="text-slate-400 text-center py-4">No pending x-ray</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="data-table">
@@ -505,7 +505,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-indigo-300" onClick={() => router.push('/ultrasound')}>
           <h2 className="text-lg font-semibold text-slate-800 mb-3">Pending Ultrasound Orders ({pendingUSG.length})</h2>
           {pendingUSG.length === 0 ? (
-            <p className="text-slate-400 text-center py-4">Koi pending USG nahi</p>
+            <p className="text-slate-400 text-center py-4">No pending ultrasound</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="data-table">
@@ -545,10 +545,10 @@ export default function DashboardPage() {
           <p className="text-cyan-200 text-sm">Billing & Revenue</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="AAJ KI KAMAI" value={`${currency} ${todayRevenue.toLocaleString()}`} sub="Today collection" color="blue" />
-          <StatCard label="MAHANE KAMAI" value={`${currency} ${monthRevenue.toLocaleString()}`} sub="This month" color="emerald" />
-          <StatCard label="KUL KAMAI" value={`${currency} ${totalRevenue.toLocaleString()}`} sub="All time" color="purple" />
-          <StatCard label="MAHANE TARGET" value={`${currency} ${monthTotal.toLocaleString()}`} sub={`Baqi: ${currency} ${(monthTotal-monthRevenue).toLocaleString()}`} color="amber" />
+          <StatCard label="Today's Collection" value={`${currency} ${todayRevenue.toLocaleString()}`} sub="Today collection" color="blue" />
+          <StatCard label="Monthly Collection" value={`${currency} ${monthRevenue.toLocaleString()}`} sub="This month" color="emerald" />
+          <StatCard label="Total Collection" value={`${currency} ${totalRevenue.toLocaleString()}`} sub="All time" color="purple" />
+          <StatCard label="Monthly Target" value={`${currency} ${monthTotal.toLocaleString()}`} sub={`Remaining: ${currency} ${(monthTotal-monthRevenue).toLocaleString()}`} color="amber" />
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Today's Bills</h2>
@@ -566,7 +566,7 @@ export default function DashboardPage() {
                     <td>{b.time}</td>
                   </tr>
                 ))}
-                {allBills.filter(b=>b.date===today).length===0 && <tr><td colSpan={6} className="text-center py-8 text-slate-400">Aaj koi bill nahi hai</td></tr>}
+                {allBills.filter(b=>b.date===today).length===0 && <tr><td colSpan={6} className="text-center py-8 text-slate-400">No bills today</td></tr>}
               </tbody>
             </table>
           </div>

@@ -1,88 +1,367 @@
 'use client';
-import { useState } from 'react';
-
-const pendingXrays = [
-  { id: '1', patient: 'Muhammad Ali (BAGA-0001)', type: 'Chest X-Ray', doctor: 'Dr. Bilal Siddiqui', date: '2025-05-15', status: 'Waiting', payment: 'Paid' },
-  { id: '2', patient: 'Ahmed Khan (BAGA-0003)', type: 'Knee X-Ray (Both)', doctor: 'Dr. Bilal Siddiqui', date: '2025-05-15', status: 'In Progress', payment: 'Paid' },
-  { id: '3', patient: 'Babar Ali (BAGA-0005)', type: 'Spine X-Ray', doctor: 'Dr. Bilal Siddiqui', date: '2025-05-14', status: 'Waiting', payment: 'Unpaid' },
-];
-
-const completedXrays = [
-  { id: '10', patient: 'Zainab Noor (BAGA-0008)', type: 'Hand X-Ray', date: '2025-05-12', status: 'Completed' },
-  { id: '11', patient: 'Hassan Raza (BAGA-0009)', type: 'Pelvis X-Ray', date: '2025-05-11', status: 'Completed' },
-];
+import { useState, useEffect } from 'react';
+import {
+  getXRayOrders, updateXRayOrder, searchPatients
+} from '@/lib/store';
+import type { XRayOrder, Patient } from '@/lib/types';
 
 export default function XrayPage() {
-  const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
+  const [tab, setTab] = useState<'pending' | 'in-progress' | 'completed'>('pending');
+  const [orders, setOrders] = useState<XRayOrder[]>([]);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  // Report modals
+  const [reportOrder, setReportOrder] = useState<XRayOrder | null>(null);
+  const [reportText, setReportText] = useState('');
+  const [viewReportOrder, setViewReportOrder] = useState<XRayOrder | null>(null);
+
+  // Patient search
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Patient[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [patientOrders, setPatientOrders] = useState<XRayOrder[]>([]);
+
+  // Stats
+  const [pendingCount, setPendingCount] = useState(0);
+  const [inProgressCount, setInProgressCount] = useState(0);
+  const [completedCount, setCompletedCount] = useState(0);
+
+  const showToast = (msg: string, type: 'success' | 'error') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const loadStats = () => {
+    const all = getXRayOrders();
+    setPendingCount(all.filter(o => o.status === 'Pending').length);
+    setInProgressCount(all.filter(o => o.status === 'In Progress').length);
+    setCompletedCount(all.filter(o => o.status === 'Completed').length);
+  };
+
+  const loadOrders = () => {
+    const all = getXRayOrders();
+    let filtered: XRayOrder[];
+    if (tab === 'pending') filtered = all.filter(o => o.status === 'Pending');
+    else if (tab === 'in-progress') filtered = all.filter(o => o.status === 'In Progress');
+    else filtered = all.filter(o => o.status === 'Completed');
+    setOrders(filtered);
+  };
+
+  useEffect(() => { loadOrders(); loadStats(); }, []);
+  useEffect(() => { loadOrders(); loadStats(); }, [tab]);
+
+  // Patient search
+  const handleSearch = (q: string) => {
+    setSearchQuery(q);
+    if (q.length < 1) { setSearchResults([]); return; }
+    setSearchResults(searchPatients(q));
+  };
+
+  const selectPatient = (p: Patient) => {
+    setSelectedPatient(p);
+    setShowSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    const all = getXRayOrders().filter(o => o.patientId === p.id);
+    setPatientOrders(all);
+  };
+
+  const clearPatientSearch = () => {
+    setSelectedPatient(null);
+    setPatientOrders([]);
+    setShowSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  // Status workflow
+  const markInProgress = (order: XRayOrder) => {
+    updateXRayOrder(order.id, { status: 'In Progress' });
+    showToast(`${order.patientNo} - X-Ray marked In Progress`, 'success');
+    loadOrders(); loadStats();
+    if (selectedPatient) setPatientOrders(getXRayOrders().filter(o => o.patientId === selectedPatient.id));
+  };
+
+  const openReportEntry = (order: XRayOrder) => {
+    setReportOrder(order);
+    setReportText(order.report || '');
+  };
+
+  const saveReport = () => {
+    if (!reportOrder) return;
+    if (!reportText.trim()) { showToast('Please enter the radiologist report', 'error'); return; }
+    updateXRayOrder(reportOrder.id, { status: 'Completed', report: reportText.trim() });
+    showToast('X-Ray report saved and marked completed', 'success');
+    setReportOrder(null);
+    setReportText('');
+    loadOrders(); loadStats();
+    if (selectedPatient) setPatientOrders(getXRayOrders().filter(o => o.patientId === selectedPatient.id));
+  };
+
+  const statusBadge = (status: string) => {
+    if (status === 'Pending') return 'badge-amber';
+    if (status === 'In Progress') return 'badge-blue';
+    return 'badge-green';
+  };
+
+  const renderOrderRow = (o: XRayOrder) => (
+    <tr key={o.id}>
+      <td className="font-mono font-bold text-blue-600">{o.patientNo}</td>
+      <td className="font-medium">{o.patientName}</td>
+      <td>{o.xrayType}</td>
+      <td className="font-semibold">Rs. {o.price.toLocaleString()}</td>
+      <td className="text-sm">{o.orderedBy}</td>
+      <td>{o.date}</td>
+      <td>
+        <span className={`badge ${statusBadge(o.status)}`}>{o.status}</span>
+      </td>
+      <td>
+        <div className="flex gap-1">
+          {o.status === 'Pending' && (
+            <button onClick={() => markInProgress(o)} className="btn btn-primary btn-sm">Start</button>
+          )}
+          {o.status === 'In Progress' && (
+            <button onClick={() => openReportEntry(o)} className="btn btn-success btn-sm">Enter Report</button>
+          )}
+          {o.status === 'Completed' && o.report && (
+            <button onClick={() => setViewReportOrder(o)} className="btn btn-outline btn-sm">View Report</button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+
+  const renderPatientOrder = (o: XRayOrder) => (
+    <div key={o.id} className="bg-white border border-slate-200 rounded-lg p-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500">{o.date}</span>
+          <span className="text-sm text-slate-400">by {o.orderedBy}</span>
+        </div>
+        <span className={`badge ${statusBadge(o.status)}`}>{o.status}</span>
+      </div>
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <span className="font-medium text-slate-700">{o.xrayType}</span>
+          <span className="ml-2 text-sm font-semibold text-slate-600">Rs. {o.price.toLocaleString()}</span>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {o.status === 'Pending' && (
+          <button onClick={() => markInProgress(o)} className="btn btn-primary btn-sm">Start Processing</button>
+        )}
+        {o.status === 'In Progress' && (
+          <button onClick={() => openReportEntry(o)} className="btn btn-success btn-sm">Enter Report</button>
+        )}
+        {o.status === 'Completed' && o.report && (
+          <button onClick={() => setViewReportOrder(o)} className="btn btn-outline btn-sm">View Report</button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">X-Ray Department</h2>
-        <div className="flex gap-2">
-          <button onClick={() => setActiveTab('pending')} className={`btn ${activeTab === 'pending' ? 'btn-primary' : 'btn-outline'}`}>
-            Queue ({pendingXrays.length})
-          </button>
-          <button onClick={() => setActiveTab('completed')} className={`btn ${activeTab === 'completed' ? 'btn-primary' : 'btn-outline'}`}>
-            Completed ({completedXrays.length})
-          </button>
+      {toast && <div className={`toast ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>{toast.msg}</div>}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">X-Ray Department</h2>
+          <p className="text-sm text-slate-500">Doctor-ordered X-Ray examinations. Search patient or browse orders.</p>
         </div>
+        <button onClick={() => setShowSearch(!showSearch)} className="btn btn-primary">
+          {showSearch ? 'Hide Search' : 'Search Patient'}
+        </button>
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="stat-card card-hover border border-blue-200 bg-blue-50">
-          <p className="text-xs text-blue-600 font-medium">Today&apos;s Queue</p>
-          <p className="text-2xl font-bold text-blue-700">{pendingXrays.filter(x => x.date === '2025-05-15').length}</p>
-        </div>
         <div className="stat-card card-hover border border-amber-200 bg-amber-50">
-          <p className="text-xs text-amber-600 font-medium">Waiting</p>
-          <p className="text-2xl font-bold text-amber-700">{pendingXrays.filter(x => x.status === 'Waiting').length}</p>
+          <p className="text-xs text-amber-600 font-medium">Pending</p>
+          <p className="text-2xl font-bold text-amber-700">{pendingCount}</p>
         </div>
-        <div className="stat-card card-hover border border-red-200 bg-red-50">
-          <p className="text-xs text-red-600 font-medium">Unpaid</p>
-          <p className="text-2xl font-bold text-red-700">{pendingXrays.filter(x => x.payment === 'Unpaid').length}</p>
+        <div className="stat-card card-hover border border-blue-200 bg-blue-50">
+          <p className="text-xs text-blue-600 font-medium">In Progress</p>
+          <p className="text-2xl font-bold text-blue-700">{inProgressCount}</p>
+        </div>
+        <div className="stat-card card-hover border border-green-200 bg-green-50">
+          <p className="text-xs text-green-600 font-medium">Completed</p>
+          <p className="text-2xl font-bold text-green-700">{completedCount}</p>
         </div>
       </div>
 
-      {activeTab === 'pending' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead><tr><th>Patient</th><th>X-Ray Type</th><th>Doctor</th><th>Date</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody>
-                {pendingXrays.map(x => (
-                  <tr key={x.id}>
-                    <td className="font-medium">{x.patient}</td>
-                    <td>{x.type}</td>
-                    <td className="text-sm">{x.doctor}</td>
-                    <td>{x.date}</td>
-                    <td><span className={`badge ${x.payment === 'Paid' ? 'badge-green' : 'badge-red'}`}>{x.payment}</span></td>
-                    <td><span className={`badge ${x.status === 'Waiting' ? 'badge-amber' : 'badge-blue'}`}>{x.status}</span></td>
-                    <td><button className="btn btn-primary btn-sm">Process</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Patient Search */}
+      {showSearch && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex gap-3 items-center">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                className="form-input pl-10"
+                placeholder="Patient No, Name, ya Mobile dalein..."
+                value={searchQuery}
+                onChange={e => handleSearch(e.target.value)}
+                autoFocus
+              />
+              <svg className="w-5 h-5 text-slate-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            {selectedPatient && (
+              <button onClick={clearPatientSearch} className="btn btn-outline btn-sm">Clear</button>
+            )}
+          </div>
+
+          {searchResults.length > 0 && !selectedPatient && (
+            <div className="mt-2 border border-slate-200 rounded-lg max-h-60 overflow-y-auto">
+              {searchResults.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => selectPatient(p)}
+                  className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-100 last:border-0 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-mono font-bold text-blue-600">{p.patientNo}</span>
+                      <span className="ml-3 font-medium text-slate-700">{p.name}</span>
+                      <span className="ml-3 text-sm text-slate-400">S/O {p.fatherName}</span>
+                    </div>
+                    <span className="text-sm text-slate-400">{p.mobile}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selectedPatient && (
+            <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
+                    {selectedPatient.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800">{selectedPatient.name}</p>
+                    <p className="text-sm text-slate-500">
+                      <span className="font-mono text-blue-600">{selectedPatient.patientNo}</span> | {selectedPatient.gender} | {selectedPatient.age} yrs | {selectedPatient.mobile}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={clearPatientSearch} className="btn btn-outline btn-sm">Close</button>
+              </div>
+
+              {patientOrders.length > 0 ? (
+                <div className="mt-4">
+                  <h4 className="font-semibold text-sm text-slate-700 mb-2">X-Ray Orders ({patientOrders.length})</h4>
+                  <div className="space-y-2">
+                    {patientOrders.map(renderPatientOrder)}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 text-center py-4 text-slate-400">
+                  Is patient ke liye koi X-Ray order nahi mila.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Buttons */}
+      <div className="flex gap-2">
+        <button onClick={() => setTab('pending')} className={`btn ${tab === 'pending' ? 'btn-primary' : 'btn-outline'}`}>
+          Pending ({pendingCount})
+        </button>
+        <button onClick={() => setTab('in-progress')} className={`btn ${tab === 'in-progress' ? 'btn-primary' : 'btn-outline'}`}>
+          In Progress ({inProgressCount})
+        </button>
+        <button onClick={() => setTab('completed')} className={`btn ${tab === 'completed' ? 'btn-primary' : 'btn-outline'}`}>
+          Completed ({completedCount})
+        </button>
+      </div>
+
+      {/* Orders Table */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Patient No</th>
+                <th>Patient Name</th>
+                <th>X-Ray Type</th>
+                <th>Price</th>
+                <th>Ordered By</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map(renderOrderRow)}
+              {orders.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="text-center py-8 text-slate-400">
+                    {tab === 'pending' ? 'Koi pending X-Ray order nahi' : tab === 'in-progress' ? 'Koi in-progress X-Ray nahi' : 'Koi completed X-Ray nahi'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Enter Report Modal */}
+      {reportOrder && (
+        <div className="modal-overlay" onClick={() => { setReportOrder(null); setReportText(''); }}>
+          <div className="modal-content" style={{ maxWidth: '650px' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-bold">Enter X-Ray Report</h3>
+                <p className="text-sm text-blue-600">{reportOrder.patientNo} - {reportOrder.patientName}</p>
+                <p className="text-xs text-slate-400">
+                  {reportOrder.xrayType} | Rs. {reportOrder.price.toLocaleString()} | Ordered by {reportOrder.orderedBy} on {reportOrder.date}
+                </p>
+              </div>
+              <button onClick={() => { setReportOrder(null); setReportText(''); }} className="btn btn-outline btn-sm">Close</button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="form-label">Radiologist Report</label>
+                <textarea
+                  className="form-input"
+                  rows={10}
+                  placeholder="Enter the radiologist findings and interpretation here..."
+                  value={reportText}
+                  onChange={e => setReportText(e.target.value)}
+                />
+              </div>
+              <button onClick={saveReport} className="btn btn-success btn-lg w-full">
+                Save Report & Mark Completed
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {activeTab === 'completed' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead><tr><th>Patient</th><th>X-Ray Type</th><th>Date</th><th>Action</th></tr></thead>
-              <tbody>
-                {completedXrays.map(x => (
-                  <tr key={x.id}>
-                    <td className="font-medium">{x.patient}</td>
-                    <td>{x.type}</td>
-                    <td>{x.date}</td>
-                    <td><button className="btn btn-outline btn-sm">View Report</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* View Report Modal */}
+      {viewReportOrder && (
+        <div className="modal-overlay" onClick={() => setViewReportOrder(null)}>
+          <div className="modal-content" style={{ maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-bold">X-Ray Report</h3>
+                <p className="text-sm text-blue-600">{viewReportOrder.patientNo} - {viewReportOrder.patientName}</p>
+                <p className="text-xs text-slate-400">
+                  {viewReportOrder.xrayType} | Ordered by {viewReportOrder.orderedBy} on {viewReportOrder.date}
+                </p>
+              </div>
+              <button onClick={() => setViewReportOrder(null)} className="btn btn-outline btn-sm">Close</button>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{viewReportOrder.report}</p>
+            </div>
           </div>
         </div>
       )}

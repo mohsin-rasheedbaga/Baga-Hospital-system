@@ -167,7 +167,7 @@ export default function ReceptionPage() {
     let meds: { name: string; dosage: string; duration: string; frequency: string; instructions: string; price: number; selected: boolean }[] = [];
     vPrescriptions.forEach(pr => {
       pr.medicines.forEach(m => {
-        meds.push({ name: m.name, dosage: m.dosage, duration: m.duration, frequency: m.frequency, instructions: m.instructions, price: m.price, selected: m.selected });
+        meds.push({ name: m.name, dosage: m.dosage||'', duration: m.duration, frequency: m.frequency||'', instructions: m.instructions, price: m.price, selected: m.selected });
       });
     });
 
