@@ -202,7 +202,8 @@ export interface Admission {
   admissionDate: string;
   purpose: string;
   roomNo: string;
-  status: 'Admitted' | 'Discharged';
+  status: 'Approved' | 'Admitted' | 'Discharged';
   notes: string;
   createdAt: string;
+  approvedBy: string;
 }
