@@ -200,7 +200,7 @@ export default function XrayPage() {
               <input
                 type="text"
                 className="form-input pl-10"
-                placeholder="Patient No, Name, ya Mobile dalein..."
+                placeholder="Enter Patient No, Name, or Mobile..."
                 value={searchQuery}
                 onChange={e => handleSearch(e.target.value)}
                 autoFocus

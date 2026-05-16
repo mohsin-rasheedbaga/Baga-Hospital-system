@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { searchPatients, getPatientByNo, getVisitsByPatient, getActiveVisitByPatient, addLabOrder, addPrescription, addXRayOrder, addUltrasoundOrder, updateVisit, updatePatient, getPrescriptionsByPatient, getLabOrdersByPatient, searchMedicines, genId, todayStr, timeStr, addAdmission, getAdmissionsByPatient, getHospitalSettings } from '@/lib/store';
-import type { Patient, Visit, LabOrder, Prescription, Admission, MedicineItem } from '@/lib/types';
+import { searchPatients, getPatientByNo, getVisitsByPatient, getActiveVisitByPatient, addLabOrder, addPrescription, addXRayOrder, addUltrasoundOrder, updateVisit, updatePatient, getPrescriptionsByPatient, getLabOrdersByPatient, searchMedicines, genId, todayStr, timeStr, addAdmission, getAdmissionsByPatient, getHospitalSettings, getXRayOrders, getUltrasoundOrders } from '@/lib/store';
+import type { Patient, Visit, LabOrder, Prescription, Admission, MedicineItem, XRayOrder, UltrasoundOrder } from '@/lib/types';
 
 const LAB_TESTS = ['CBC', 'Blood Sugar (Fasting)', 'Blood Sugar (Random)', 'Liver Function Test (LFT)', 'Kidney Function Test (KFT)', 'Urine Routine', 'Urine Culture', 'Thyroid Panel (T3,T4,TSH)', 'Lipid Profile', 'HbA1c', 'ESR', 'CRP', 'HIV', 'Hepatitis B', 'Hepatitis C', 'Dengue NS1', 'Electrolytes', 'Vitamin D', 'Iron Studies', 'Blood Group', 'PT/INR'];
 const TIMING_OPTIONS = ['Before Breakfast','After Breakfast','Before Lunch','After Lunch','Before Dinner','After Dinner','At Bedtime','Every 6 Hours','Every 8 Hours','SOS','After Meal','Before Meal','Empty Stomach'];
@@ -29,12 +29,15 @@ export default function DoctorPage() {
   const [usgType, setUsgType] = useState('');
   const [pLabOrders, setPLabOrders] = useState<LabOrder[]>([]);
   const [pPrescriptions, setPPrescriptions] = useState<Prescription[]>([]);
+  const [pXRayOrders, setPXRayOrders] = useState<XRayOrder[]>([]);
+  const [pUltrasoundOrders, setPUltrasoundOrders] = useState<UltrasoundOrder[]>([]);
   const [admissions, setAdmissions] = useState<Admission[]>([]);
 
-  // Admission fields (doctor only chooses date + purpose)
+  // Admission fields (doctor chooses date + purpose + fee)
   const [admissionPurpose, setAdmissionPurpose] = useState('');
   const [admissionDate, setAdmissionDate] = useState('');
   const [admissionNotes, setAdmissionNotes] = useState('');
+  const [admissionFee, setAdmissionFee] = useState('');
 
   const showToast = (msg:string,type:'success'|'error')=>{setToast({msg,type});setTimeout(()=>setToast(null),3000)};
 
@@ -57,7 +60,7 @@ export default function DoctorPage() {
     setSelectedPatient(p);setSearchResults([]);
     setDiagnosis('');setNotes('');setSelectedTests([]);setRxMeds([]);setRxNotes('');setXrayType('');setUsgType('');
     setVitals({bp:'',pulse:'',temp:'',weight:''});
-    setAdmissionPurpose('');setAdmissionDate('');setAdmissionNotes('');
+    setAdmissionPurpose('');setAdmissionDate('');setAdmissionNotes('');setAdmissionFee('');
     const ev=getActiveVisitByPatient(p.id);
     if(ev){setActiveVisit(ev);setDiagnosis(ev.diagnosis||'');setNotes(ev.notes||'');setVitals(ev.vitals||{bp:'',pulse:'',temp:'',weight:''});}
     else{
@@ -68,6 +71,8 @@ export default function DoctorPage() {
     }
     setPLabOrders(getLabOrdersByPatient(p.id));
     setPPrescriptions(getPrescriptionsByPatient(p.id));
+    setPXRayOrders(getXRayOrders().filter(o => o.patientId === p.id));
+    setPUltrasoundOrders(getUltrasoundOrders().filter(o => o.patientId === p.id));
     setAdmissions(getAdmissionsByPatient(p.id));
     setTab('info');
   };
@@ -101,21 +106,22 @@ export default function DoctorPage() {
     if(!activeVisit||!xrayType){showToast('Select type','error');return}
     const docName = session?.name || 'Current Doctor';
     addXRayOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,xrayType,price:0,selected:true,orderedBy:docName,date:todayStr(),status:'Pending'});
-    setXrayType('');showToast('X-Ray ordered!','success');
+    setXrayType('');setPXRayOrders(getXRayOrders().filter(o => o.patientId === selectedPatient!.id));showToast('X-Ray ordered!','success');
   };
 
   const orderUSG=()=>{
     if(!activeVisit||!usgType){showToast('Select type','error');return}
     const docName = session?.name || 'Current Doctor';
     addUltrasoundOrder({id:genId(),visitId:activeVisit.id,patientId:selectedPatient!.id,patientNo:selectedPatient!.patientNo,patientName:selectedPatient!.name,usgType,price:0,selected:true,orderedBy:docName,date:todayStr(),status:'Pending'});
-    setUsgType('');showToast('Ultrasound ordered!','success');
+    setUsgType('');setPUltrasoundOrders(getUltrasoundOrders().filter(o => o.patientId === selectedPatient!.id));showToast('Ultrasound ordered!','success');
   };
 
   // Doctor approves admission - department & doctor auto from session
   const handleAdmission = () => {
-    if (!selectedPatient || !admissionPurpose) { showToast('Purpose zaroor select karein', 'error'); return; }
+    if (!selectedPatient || !admissionPurpose) { showToast('Please select admission purpose', 'error'); return; }
     const dept = session?.department || 'General';
     const docName = session?.name || 'Current Doctor';
+    const fee = parseFloat(admissionFee) || 0;
     addAdmission({
       id: genId(),
       patientId: selectedPatient.id,
@@ -123,7 +129,7 @@ export default function DoctorPage() {
       patientName: selectedPatient.name,
       department: dept,
       doctor: docName,
-      doctorFee: 0,
+      doctorFee: fee,
       admissionDate: admissionDate || todayStr(),
       admittedAt: '',
       dischargedAt: '',
@@ -137,8 +143,8 @@ export default function DoctorPage() {
       approvedBy: docName,
     });
     setAdmissions(getAdmissionsByPatient(selectedPatient.id));
-    setAdmissionPurpose('');setAdmissionDate('');setAdmissionNotes('');
-    showToast('Admission Approved! Reception ko bhej diya gaya.', 'success');
+    setAdmissionPurpose('');setAdmissionDate('');setAdmissionNotes('');setAdmissionFee('');
+    showToast('Admission Approved! Reception has been notified.', 'success');
   };
 
   const discharge=()=>{
@@ -149,10 +155,11 @@ export default function DoctorPage() {
     setActiveVisit(null);setSelectedPatient(null);showToast('Patient discharged!','success');
   };
 
-  const tabs=[{key:'info',label:'Info'},{key:'vitals',label:'Vitals'},{key:'prescribe',label:'Medication'},{key:'lab',label:'Lab Order'},{key:'xray',label:'X-Ray'},{key:'ultrasound',label:'USG'},{key:'admission',label:'Admission'},{key:'notes',label:'Diagnosis'},{key:'reports',label:'Reports'},{key:'history',label:'History'}];
+  const tabs=[{key:'info',label:'Info'},{key:'vitals',label:'Vitals'},{key:'prescribe',label:'Medication'},{key:'admission',label:'Admission'},{key:'notes',label:'Diagnosis'},{key:'reports',label:'Reports'},{key:'history',label:'History'}];
 
   const doctorName = session?.name || 'Doctor';
   const doctorDept = session?.department || 'General';
+  const currency = getHospitalSettings().currency;
 
   return (
     <div className="space-y-5">
@@ -173,7 +180,7 @@ export default function DoctorPage() {
       <div className="bg-white rounded-xl border-2 border-purple-200 p-5">
         <h2 className="text-lg font-bold text-slate-800 mb-3">Search Patient - Card Number / Mobile</h2>
         <div className="flex gap-3">
-          <input className="form-input flex-1 text-lg" placeholder="BAGA-0001 ya mobile number..."
+          <input className="form-input flex-1 text-lg" placeholder="Enter card number (BAGA-0001) or mobile number..."
             value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSearch()} />
           <button onClick={handleSearch} className="btn btn-primary btn-lg">Search</button>
         </div>
@@ -260,7 +267,7 @@ export default function DoctorPage() {
                             <p className="text-xs text-slate-500 mt-0.5">{med.form} &middot; {med.strength} &middot; {med.packing}</p>
                           </div>
                           <div className="text-right shrink-0 ml-3">
-                            <p className="font-bold text-purple-700">{getHospitalSettings().currency}{med.price}</p>
+                            <p className="font-bold text-purple-700">{currency}{med.price}</p>
                             <span className="badge badge-blue text-xs">{med.category}</span>
                           </div>
                         </button>
@@ -319,7 +326,7 @@ export default function DoctorPage() {
                             <td className="px-3 py-2">
                               <input className="form-input py-1 text-sm" placeholder="e.g. Take with water" value={med.instructions} onChange={e=>updateRxMed(idx,'instructions',e.target.value)} />
                             </td>
-                            <td className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">{getHospitalSettings().currency}{med.price}</td>
+                            <td className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">{currency}{med.price}</td>
                             <td className="px-3 py-2 text-center">
                               <button onClick={()=>setRxMeds(rxMeds.filter((_,i)=>i!==idx))} className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded p-1.5 transition-colors" title="Remove medicine">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -331,7 +338,7 @@ export default function DoctorPage() {
                       <tfoot>
                         <tr className="bg-slate-50 border-t-2 border-slate-200">
                           <td colSpan={8} className="px-3 py-2.5 text-right font-bold text-slate-700">Total:</td>
-                          <td className="px-3 py-2.5 font-extrabold text-purple-700">{getHospitalSettings().currency}{rxMeds.reduce((s,m)=>s+m.price,0)}</td>
+                          <td className="px-3 py-2.5 font-extrabold text-purple-700">{currency}{rxMeds.reduce((s,m)=>s+m.price,0)}</td>
                           <td></td>
                         </tr>
                       </tfoot>
@@ -392,44 +399,12 @@ export default function DoctorPage() {
               </div>
             )}
 
-            {tab==='lab'&&(
-              <div className="space-y-4">
-                <h3 className="font-semibold">Order Lab Tests</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {LAB_TESTS.map(test=>(<button key={test} onClick={()=>setSelectedTests(selectedTests.includes(test)?selectedTests.filter(t=>t!==test):[...selectedTests,test])} className={`p-2 rounded-lg border text-sm text-left transition-colors ${selectedTests.includes(test)?'border-purple-500 bg-purple-50 text-purple-700 font-medium':'border-slate-200 hover:border-slate-300 text-slate-600'}`}>{selectedTests.includes(test)&&<span className="mr-1">&#10003;</span>}{test}</button>))}
-                </div>
-                {selectedTests.length>0&&<p className="text-sm text-purple-600 font-medium">{selectedTests.length} test(s) selected</p>}
-                <button onClick={orderLabTests} className="btn btn-success btn-lg" disabled={selectedTests.length===0}>Order Lab Tests</button>
-                {pLabOrders.length>0&&<div className="mt-4 border-t pt-4"><h4 className="font-semibold text-sm mb-2">Previous Orders</h4>{pLabOrders.map(o=>(<div key={o.id} className="border border-slate-200 rounded-lg p-3 mb-2"><div className="flex justify-between"><span className="text-sm text-slate-500">{o.date} {o.time}</span><span className={`badge ${o.status==='Completed'?'badge-green':'badge-amber'}`}>{o.status}</span></div><div className="flex flex-wrap gap-1 mt-1">{o.tests.map((t,i)=><span key={i} className="badge badge-blue">{t.testName}</span>)}</div></div>))}</div>}
-              </div>
-            )}
-
-            {tab==='xray'&&(
-              <div className="space-y-4">
-                <h3 className="font-semibold">Order X-Ray</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {['Chest X-Ray','Knee X-Ray (Both)','Spine X-Ray (Lumbar)','Pelvis X-Ray','Hand X-Ray','Foot X-Ray','Shoulder X-Ray','Abdomen X-Ray','Skull X-Ray'].map(x=>(<button key={x} onClick={()=>setXrayType(x)} className={`p-2 rounded-lg border text-sm transition-colors ${xrayType===x?'border-purple-500 bg-purple-50 text-purple-700 font-medium':'border-slate-200 hover:border-slate-300 text-slate-600'}`}>{xrayType===x&&<span className="mr-1">&#10003;</span>}{x}</button>))}
-                </div>
-                <button onClick={orderXR} className="btn btn-success btn-lg" disabled={!xrayType}>Order X-Ray</button>
-              </div>
-            )}
-
-            {tab==='ultrasound'&&(
-              <div className="space-y-4">
-                <h3 className="font-semibold">Order Ultrasound</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {['Abdominal USG','Pelvic USG','Obstetric USG','Thyroid USG','Breast USG','Renal USG','Prostate USG','Doppler Study'].map(u=>(<button key={u} onClick={()=>setUsgType(u)} className={`p-2 rounded-lg border text-sm transition-colors ${usgType===u?'border-purple-500 bg-purple-50 text-purple-700 font-medium':'border-slate-200 hover:border-slate-300 text-slate-600'}`}>{usgType===u&&<span className="mr-1">&#10003;</span>}{u}</button>))}
-                </div>
-                <button onClick={orderUSG} className="btn btn-success btn-lg" disabled={!usgType}>Order Ultrasound</button>
-              </div>
-            )}
-
             {tab==='admission'&&(
               <div className="space-y-4">
                 {/* Doctor Admission - Department & Doctor AUTO from session */}
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                   <h3 className="font-bold text-amber-800 text-sm uppercase tracking-wide">Patient Admission - Doctor Approval</h3>
-                  <p className="text-xs text-amber-600 mt-1">Doctor admission approve karega. Reception room assign karega. Department aur Doctor name automatically aayega.</p>
+                  <p className="text-xs text-amber-600 mt-1">Doctor approves admission. Department and doctor name are auto-filled from your profile.</p>
                 </div>
 
                 {/* Auto Info */}
@@ -450,12 +425,12 @@ export default function DoctorPage() {
                   <p className="font-bold text-blue-800">{selectedPatient.patientNo} - {selectedPatient.name}</p>
                 </div>
 
-                {/* Doctor selects: Date & Purpose */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Doctor selects: Date, Purpose & Fee */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="form-label">Admission Date *</label>
                     <input className="form-input" type="date" value={admissionDate} onChange={e=>setAdmissionDate(e.target.value)} />
-                    <p className="text-xs text-slate-400 mt-1">Aaj admit karna hai ya kisi aur din? Date select karein.</p>
+                    <p className="text-xs text-slate-400 mt-1">Select the admission date</p>
                   </div>
                   <div>
                     <label className="form-label">Purpose *</label>
@@ -470,22 +445,27 @@ export default function DoctorPage() {
                       <option>Other</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="form-label">Doctor Fee ({currency})</label>
+                    <input className="form-input" type="number" min="0" placeholder="e.g. 5000" value={admissionFee} onChange={e=>setAdmissionFee(e.target.value)} />
+                    <p className="text-xs text-slate-400 mt-1">Admission / surgery fee amount</p>
+                  </div>
                 </div>
 
                 <div>
                   <label className="form-label">Doctor Notes</label>
-                  <textarea className="form-input" rows={3} value={admissionNotes} onChange={e=>setAdmissionNotes(e.target.value)} placeholder="Admission ke baare mein notes likhein... kya operation hai, kya checkup hai, etc."/>
+                  <textarea className="form-input" rows={3} value={admissionNotes} onChange={e=>setAdmissionNotes(e.target.value)} placeholder="Enter admission notes... e.g. type of surgery, reason for admission, etc."/>
                 </div>
 
                 <button onClick={handleAdmission} className="btn btn-success btn-lg w-full">
-                  Admission Approve Karain
+                  Approve Admission
                 </button>
-                <p className="text-xs text-center text-slate-400">Approval ke baad Reception ko notification jayegi. Reception room assign karke admit karega.</p>
+                <p className="text-xs text-center text-slate-400">After approval, reception will be notified to process the admission</p>
 
                 {/* Previous Admissions */}
                 {admissions.length > 0 && (
                   <div className="mt-6 border-t pt-4">
-                    <h4 className="font-semibold text-sm mb-2">Is Patient Ki Admissions</h4>
+                    <h4 className="font-semibold text-sm mb-2">Patient Admission History</h4>
                     {admissions.map(a => (
                       <div key={a.id} className={`border rounded-lg p-3 mb-2 ${a.status === 'Approved' ? 'border-amber-200 bg-amber-50' : a.status === 'Admitted' ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'}`}>
                         <div className="flex justify-between">
@@ -497,6 +477,7 @@ export default function DoctorPage() {
                         <div className="text-sm text-slate-500 mt-1">
                           Date: {a.admissionDate} | Dept: {a.department} | Doctor: {a.doctor}
                           {a.roomNo && ` | Room: ${a.roomNo}`}
+                          {a.doctorFee > 0 && ` | Fee: ${currency}${a.doctorFee}`}
                         </div>
                         {a.notes && <div className="text-sm text-slate-500 mt-1">Notes: {a.notes}</div>}
                       </div>
@@ -515,13 +496,115 @@ export default function DoctorPage() {
             )}
 
             {tab==='reports'&&(
-              <div className="space-y-4">
-                <h3 className="font-semibold">Lab Reports</h3>
-                {pLabOrders.length===0&&<p className="text-slate-400 text-center py-4">No reports yet</p>}
-                {pLabOrders.map(o=>(<div key={o.id} className="border border-slate-200 rounded-lg p-4 mb-2"><div className="flex justify-between"><span className="text-sm text-slate-500">{o.date}</span><span className={`badge ${o.status==='Completed'?'badge-green':'badge-amber'}`}>{o.status}</span></div><div className="flex flex-wrap gap-1 mt-1">{o.tests.map((t,i)=><span key={i} className="badge badge-blue">{t.testName}</span>)}</div></div>))}
-                <h3 className="font-semibold mt-6">Prescriptions</h3>
-                {pPrescriptions.length===0&&<p className="text-slate-400 text-center py-4">No prescriptions yet</p>}
-                {pPrescriptions.map(rx=>(<div key={rx.id} className="border border-slate-200 rounded-lg p-4 mb-2"><div className="flex justify-between"><span className="text-sm text-slate-500">{rx.date} {rx.time}</span><span className={`badge ${rx.status==='Active'?'badge-blue':'badge-green'}`}>{rx.status}</span></div><table className="data-table mt-2"><thead><tr><th>Medicine</th><th>Form</th><th>Strength</th><th>Qty</th><th>Timing</th><th>Duration</th></tr></thead><tbody>{rx.medicines.map((m,i)=><tr key={i}><td className="font-medium">{m.name}</td><td>{m.form||'-'}</td><td>{m.strength||'-'}</td><td>{m.qtyPerDay||m.dosage||'-'}</td><td>{m.timing||m.frequency||'-'}</td><td>{m.duration}</td></tr>)}</tbody></table></div>))}
+              <div className="space-y-6">
+                {/* Lab Reports Section */}
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    Lab Reports
+                  </h3>
+                  {pLabOrders.length===0&&<p className="text-slate-400 text-center py-4">No lab reports yet</p>}
+                  {pLabOrders.map(o=>(
+                    <div key={o.id} className="border border-slate-200 rounded-lg p-4 mb-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-slate-500">{o.date} {o.time}</span>
+                        <span className={`badge ${o.status==='Completed'?'badge-green':'badge-amber'}`}>{o.status}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {o.tests.map((t,i)=><span key={i} className="badge badge-blue">{t.testName}</span>)}
+                      </div>
+                      {o.status==='Completed'&&o.results&&o.results.length>0&&(
+                        <div className="mt-3 overflow-x-auto">
+                          <table className="data-table text-sm">
+                            <thead><tr><th>Test</th><th>Result</th><th>Reference</th></tr></thead>
+                            <tbody>
+                              {o.results.map((r,i)=>(
+                                <tr key={i}>
+                                  <td className="font-medium">{r.testName}</td>
+                                  <td className="font-mono">{r.value||'-'} {r.unit}</td>
+                                  <td className="text-slate-500 text-xs">{r.normalRange||'-'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* X-Ray Reports Section */}
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    X-Ray Reports
+                  </h3>
+                  {pXRayOrders.length===0&&<p className="text-slate-400 text-center py-4">No X-Ray reports yet</p>}
+                  {pXRayOrders.map(o=>(
+                    <div key={o.id} className="border border-slate-200 rounded-lg p-4 mb-2">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="font-medium text-slate-800">{o.xrayType}</span>
+                          <span className="text-sm text-slate-500 ml-2">{o.date}</span>
+                        </div>
+                        <span className={`badge ${o.status==='Completed'?'badge-green':o.status==='In Progress'?'badge-blue':'badge-amber'}`}>{o.status}</span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">Ordered by: {o.orderedBy}</div>
+                      {o.status==='Completed'&&o.report&&(
+                        <div className="mt-2 bg-slate-50 rounded-lg p-3 text-sm text-slate-700 border border-slate-100">
+                          <p className="font-medium text-slate-600 mb-1">Report:</p>
+                          <p className="whitespace-pre-wrap">{o.report}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Ultrasound Reports Section */}
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Ultrasound Reports
+                  </h3>
+                  {pUltrasoundOrders.length===0&&<p className="text-slate-400 text-center py-4">No ultrasound reports yet</p>}
+                  {pUltrasoundOrders.map(o=>(
+                    <div key={o.id} className="border border-slate-200 rounded-lg p-4 mb-2">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="font-medium text-slate-800">{o.usgType}</span>
+                          <span className="text-sm text-slate-500 ml-2">{o.date}</span>
+                        </div>
+                        <span className={`badge ${o.status==='Completed'?'badge-green':o.status==='In Progress'?'badge-blue':'badge-amber'}`}>{o.status}</span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">Ordered by: {o.orderedBy}</div>
+                      {o.status==='Completed'&&o.report&&(
+                        <div className="mt-2 bg-slate-50 rounded-lg p-3 text-sm text-slate-700 border border-slate-100">
+                          <p className="font-medium text-slate-600 mb-1">Report:</p>
+                          <p className="whitespace-pre-wrap">{o.report}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Prescriptions Section */}
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                    Prescriptions
+                  </h3>
+                  {pPrescriptions.length===0&&<p className="text-slate-400 text-center py-4">No prescriptions yet</p>}
+                  {pPrescriptions.map(rx=>(
+                    <div key={rx.id} className="border border-slate-200 rounded-lg p-4 mb-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-slate-500">{rx.date} {rx.time} — {rx.prescribedBy}</span>
+                        <span className={`badge ${rx.status==='Active'?'badge-blue':'badge-green'}`}>{rx.status}</span>
+                      </div>
+                      <table className="data-table mt-2"><thead><tr><th>Medicine</th><th>Form</th><th>Strength</th><th>Qty</th><th>Timing</th><th>Duration</th></tr></thead><tbody>{rx.medicines.map((m,i)=><tr key={i}><td className="font-medium">{m.name}</td><td>{m.form||'-'}</td><td>{m.strength||'-'}</td><td>{m.qtyPerDay||m.dosage||'-'}</td><td>{m.timing||m.frequency||'-'}</td><td>{m.duration}</td></tr>)}</tbody></table>
+                      {rx.notes&&<p className="text-xs text-slate-400 mt-2 italic">Notes: {rx.notes}</p>}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

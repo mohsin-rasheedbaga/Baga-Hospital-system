@@ -204,7 +204,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <ActionButton label="Naya Patient" desc="Register new patient" color="blue" route="/reception" />
+            <ActionButton label="New Patient" desc="Register new patient" color="blue" route="/reception" />
             <ActionButton label="New Visit" desc="Create visit" color="emerald" route="/reception" />
             <ActionButton label="Appointment" desc="Book appointment" color="purple" route="/appointment" />
             <ActionButton label="Admission" desc="Admit patient" color="amber" route="/admission" />
