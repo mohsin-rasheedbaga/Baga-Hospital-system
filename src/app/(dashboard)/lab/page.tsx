@@ -1,100 +1,99 @@
 'use client';
-import { useState } from 'react';
-
-const pendingTests = [
-  { id: '1', patient: 'Muhammad Ali (BAGA-0001)', test: 'Complete Blood Count (CBC)', doctor: 'Dr. Ahmed Hassan', date: '2025-05-15', status: 'Pending', payment: 'Paid' },
-  { id: '2', patient: 'Fatima Bibi (BAGA-0002)', test: 'Blood Sugar (Fasting)', doctor: 'Dr. Ahmed Hassan', date: '2025-05-15', status: 'In Progress', payment: 'Paid' },
-  { id: '3', patient: 'Babar Ali (BAGA-0005)', test: 'Liver Function Test (LFT)', doctor: 'Dr. Muhammad Ali', date: '2025-05-14', status: 'Pending', payment: 'Unpaid' },
-  { id: '4', patient: 'Ahmed Khan (BAGA-0003)', test: 'Urinalysis', doctor: 'Dr. Ahmed Hassan', date: '2025-05-14', status: 'Ready', payment: 'Paid' },
-  { id: '5', patient: 'Ayesha Siddiqui (BAGA-0004)', test: 'Thyroid Panel', doctor: 'Dr. Sara Khan', date: '2025-05-13', status: 'Ready', payment: 'Paid' },
-];
-
-const completedTests = [
-  { id: '10', patient: 'Zainab Noor (BAGA-0008)', test: 'CBC', date: '2025-05-12', result: 'Normal' },
-  { id: '11', patient: 'Hassan Raza (BAGA-0009)', test: 'Blood Sugar', date: '2025-05-11', result: 'High' },
-];
+import { useState, useEffect } from 'react';
+import { getPendingLabOrders, getLabOrders, updateLabOrder, genId, todayStr, timeStr } from '@/lib/store';
+import type { LabOrder, LabResult } from '@/lib/types';
 
 export default function LabPage() {
-  const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
+  const [tab, setTab] = useState<'pending' | 'completed'>('pending');
+  const [orders, setOrders] = useState<LabOrder[]>([]);
+  const [toast, setToast] = useState<{msg:string;type:'success'|'error'}|null>(null);
+  const [resultOrder, setResultOrder] = useState<LabOrder | null>(null);
+  const [results, setResults] = useState<{testName:string;value:string;unit:string;normalRange:string;status:string}[]>([]);
+
+  const showToast=(msg:string,type:'success'|'error')=>{setToast({msg,type});setTimeout(()=>setToast(null),3000)};
+
+  useEffect(()=>{loadOrders()},[]);
+
+  const loadOrders=()=>{
+    const all=getLabOrders();
+    setOrders(tab==='pending'?all.filter(o=>o.status!=='Completed'):all.filter(o=>o.status==='Completed'));
+  };
+  useEffect(()=>{loadOrders()},[tab]);
+
+  const openResult=(order:LabOrder)=>{
+    setResultOrder(order);
+    setResults(order.testNames.map(t=>({testName:t,value:'',unit:'',normalRange:'',status:'Normal'})));
+  };
+
+  const saveResults=()=>{
+    if(!resultOrder)return;
+    const filled=results.filter(r=>r.value.trim()!=='');
+    if(filled.length===0){showToast('Enter at least one result','error');return}
+    const labResults:LabResult[]=filled.map(r=>({testName:r.testName,value:r.value,unit:r.unit||'-',normalRange:r.normalRange||'-',status:(r.status||'Normal') as 'Normal'|'Low'|'High'}));
+    updateLabOrder(resultOrder.id,{status:'Completed',results:labResults});
+    setResultOrder(null);loadOrders();
+    showToast('Lab results saved!','success');
+  };
 
   return (
     <div className="space-y-5">
+      {toast&&<div className={`toast ${toast.type==='success'?'toast-success':'toast-error'}`}>{toast.msg}</div>}
+
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">Laboratory Management</h2>
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">Laboratory</h2>
+          <p className="text-sm text-slate-500">Doctor-ordered lab tests. Enter results when ready.</p>
+        </div>
         <div className="flex gap-2">
-          <button onClick={() => setActiveTab('pending')} className={`btn ${activeTab === 'pending' ? 'btn-primary' : 'btn-outline'}`}>
-            Pending ({pendingTests.length})
-          </button>
-          <button onClick={() => setActiveTab('completed')} className={`btn ${activeTab === 'completed' ? 'btn-primary' : 'btn-outline'}`}>
-            Completed ({completedTests.length})
-          </button>
+          <button onClick={()=>setTab('pending')} className={`btn ${tab==='pending'?'btn-primary':'btn-outline'}`}>Pending ({getPendingLabOrders().length})</button>
+          <button onClick={()=>setTab('completed')} className={`btn ${tab==='completed'?'btn-primary':'btn-outline'}`}>Completed</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="stat-card card-hover border border-blue-200 bg-blue-50">
-          <p className="text-xs text-blue-600 font-medium">Total Tests Today</p>
-          <p className="text-2xl font-bold text-blue-700">{pendingTests.filter(t => t.date === '2025-05-15').length}</p>
-        </div>
-        <div className="stat-card card-hover border border-amber-200 bg-amber-50">
-          <p className="text-xs text-amber-600 font-medium">Pending</p>
-          <p className="text-2xl font-bold text-amber-700">{pendingTests.filter(t => t.status === 'Pending').length}</p>
-        </div>
-        <div className="stat-card card-hover border border-emerald-200 bg-emerald-50">
-          <p className="text-xs text-emerald-600 font-medium">Ready</p>
-          <p className="text-2xl font-bold text-emerald-700">{pendingTests.filter(t => t.status === 'Ready').length}</p>
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead><tr><th>Patient No</th><th>Patient Name</th><th>Tests Ordered</th><th>Ordered By</th><th>Date</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {orders.map(o=>(
+                <tr key={o.id}>
+                  <td className="font-mono font-bold text-blue-600">{o.patientNo}</td>
+                  <td className="font-medium">{o.patientName}</td>
+                  <td><div className="flex flex-wrap gap-1">{o.testNames.map((t,i)=><span key={i} className="badge badge-blue">{t}</span>)}</div></td>
+                  <td className="text-sm">{o.orderedBy}</td>
+                  <td>{o.date}</td><td>{o.time}</td>
+                  <td><span className={`badge ${o.status==='Pending'?'badge-amber':o.status==='In Progress'?'badge-blue':'badge-green'}`}>{o.status}</span></td>
+                  <td>{o.status!=='Completed'&&<button onClick={()=>openResult(o)} className="btn btn-primary btn-sm">Enter Results</button>}</td>
+                </tr>
+              ))}
+              {orders.length===0&&<tr><td colSpan={8} className="text-center py-8 text-slate-400">No orders found</td></tr>}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {activeTab === 'pending' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead><tr><th>Patient</th><th>Test</th><th>Doctor</th><th>Date</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody>
-                {pendingTests.map(t => (
-                  <tr key={t.id}>
-                    <td className="font-medium">{t.patient}</td>
-                    <td>{t.test}</td>
-                    <td className="text-sm">{t.doctor}</td>
-                    <td>{t.date}</td>
-                    <td><span className={`badge ${t.payment === 'Paid' ? 'badge-green' : 'badge-red'}`}>{t.payment}</span></td>
-                    <td>
-                      <span className={`badge ${t.status === 'Pending' ? 'badge-amber' : t.status === 'In Progress' ? 'badge-blue' : 'badge-green'}`}>
-                        {t.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex gap-1">
-                        <button className="btn btn-primary btn-sm">Process</button>
-                        {t.status === 'Ready' && <button className="btn btn-success btn-sm">View Report</button>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'completed' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead><tr><th>Patient</th><th>Test</th><th>Date</th><th>Result</th><th>Action</th></tr></thead>
-              <tbody>
-                {completedTests.map(t => (
-                  <tr key={t.id}>
-                    <td className="font-medium">{t.patient}</td>
-                    <td>{t.test}</td>
-                    <td>{t.date}</td>
-                    <td><span className={`badge ${t.result === 'Normal' ? 'badge-green' : 'badge-red'}`}>{t.result}</span></td>
-                    <td><button className="btn btn-outline btn-sm">View Report</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Enter Results Modal */}
+      {resultOrder&&(
+        <div className="modal-overlay" onClick={()=>setResultOrder(null)}>
+          <div className="modal-content" style={{maxWidth:'700px'}} onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div><h3 className="text-lg font-bold">Enter Lab Results</h3><p className="text-sm text-blue-600">{resultOrder.patientNo} - {resultOrder.patientName}</p></div>
+              <button onClick={()=>setResultOrder(null)} className="btn btn-outline btn-sm">Close</button>
+            </div>
+            <div className="space-y-3">
+              {results.map((r,idx)=>(
+                <div key={idx} className="border border-slate-200 rounded-lg p-3">
+                  <div className="font-semibold text-sm text-slate-700 mb-2">{r.testName}</div>
+                  <div className="grid grid-cols-5 gap-2">
+                    <div><label className="text-xs text-slate-500">Value</label><input className="form-input" value={r.value} onChange={e=>{const u=[...results];u[idx]={...u[idx],value:e.target.value};setResults(u)}}/></div>
+                    <div><label className="text-xs text-slate-500">Unit</label><input className="form-input" placeholder="mg/dL" value={r.unit} onChange={e=>{const u=[...results];u[idx]={...u[idx],unit:e.target.value};setResults(u)}}/></div>
+                    <div><label className="text-xs text-slate-500">Normal</label><input className="form-input" placeholder="70-100" value={r.normalRange} onChange={e=>{const u=[...results];u[idx]={...u[idx],normalRange:e.target.value};setResults(u)}}/></div>
+                    <div><label className="text-xs text-slate-500">Status</label><select className="form-input" value={r.status} onChange={e=>{const u=[...results];u[idx]={...u[idx],status:e.target.value};setResults(u)}}><option>Normal</option><option>Low</option><option>High</option></select></div>
+                  </div>
+                </div>
+              ))}
+              <button onClick={saveResults} className="btn btn-success btn-lg w-full">Save Results</button>
+            </div>
           </div>
         </div>
       )}

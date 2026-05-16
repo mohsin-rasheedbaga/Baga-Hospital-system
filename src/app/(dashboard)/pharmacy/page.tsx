@@ -1,102 +1,77 @@
 'use client';
-import { useState } from 'react';
-
-const demoMedicines = [
-  { id: '1', name: 'Paracetamol 500mg', category: 'Pain Relief', stock: 500, price: 50, unit: 'Tablet', status: 'In Stock' },
-  { id: '2', name: 'Amoxicillin 250mg', category: 'Antibiotic', stock: 200, price: 120, unit: 'Capsule', status: 'In Stock' },
-  { id: '3', name: 'Omeprazole 20mg', category: 'Gastro', stock: 15, price: 80, unit: 'Capsule', status: 'Low Stock' },
-  { id: '4', name: 'Cetirizine 10mg', category: 'Allergy', stock: 300, price: 40, unit: 'Tablet', status: 'In Stock' },
-  { id: '5', name: 'Metformin 500mg', category: 'Diabetes', stock: 0, price: 60, unit: 'Tablet', status: 'Out of Stock' },
-  { id: '6', name: 'Ibuprofen 400mg', category: 'Pain Relief', stock: 180, price: 35, unit: 'Tablet', status: 'In Stock' },
-];
-
-const recentDispensed = [
-  { id: '1', patient: 'Muhammad Ali (BAGA-0001)', medicines: 'Paracetamol, Amoxicillin', total: 340, date: '2025-05-15' },
-  { id: '2', patient: 'Fatima Bibi (BAGA-0002)', medicines: 'Omeprazole, Cetirizine', total: 240, date: '2025-05-15' },
-  { id: '3', patient: 'Ahmed Khan (BAGA-0003)', medicines: 'Ibuprofen', total: 105, date: '2025-05-14' },
-];
+import { useState, useEffect } from 'react';
+import { getActivePrescriptions, updatePrescription, addDispense, genId, todayStr, timeStr } from '@/lib/store';
+import type { Prescription } from '@/lib/types';
 
 export default function PharmacyPage() {
-  const [activeTab, setActiveTab] = useState<'stock' | 'dispense'>('stock');
-  const [search, setSearch] = useState('');
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [toast, setToast] = useState<{msg:string;type:'success'|'error'}|null>(null);
+  const [dispenseRx, setDispenseRx] = useState<Prescription | null>(null);
 
-  const filtered = demoMedicines.filter(m =>
-    m.name.toLowerCase().includes(search.toLowerCase()) ||
-    m.category.toLowerCase().includes(search.toLowerCase())
-  );
+  const showToast=(msg:string,type:'success'|'error')=>{setToast({msg,type});setTimeout(()=>setToast(null),3000)};
+
+  useEffect(()=>{loadRxs()},[]);
+  const loadRxs=()=>{setPrescriptions(getActivePrescriptions())};
+
+  const confirmDispense=()=>{
+    if(!dispenseRx)return;
+    updatePrescription(dispenseRx.id,{status:'Dispensed'});
+    addDispense({id:genId(),prescriptionId:dispenseRx.id,patientNo:dispenseRx.patientNo,patientName:dispenseRx.patientName,medicines:dispenseRx.medicines.map(m=>m.name),dispensedBy:'Pharmacist',date:todayStr(),time:timeStr()});
+    setDispenseRx(null);loadRxs();
+    showToast('Medicines dispensed successfully!','success');
+  };
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">Pharmacy Management</h2>
-        <div className="flex gap-2">
-          <button onClick={() => setActiveTab('stock')} className={`btn ${activeTab === 'stock' ? 'btn-primary' : 'btn-outline'}`}>Medicine Stock</button>
-          <button onClick={() => setActiveTab('dispense')} className={`btn ${activeTab === 'dispense' ? 'btn-primary' : 'btn-outline'}`}>Dispense History</button>
+      {toast&&<div className={`toast ${toast.type==='success'?'toast-success':'toast-error'}`}>{toast.msg}</div>}
+
+      <div>
+        <h2 className="text-xl font-bold text-slate-800">Pharmacy</h2>
+        <p className="text-sm text-slate-500">Active prescriptions from doctors. Dispense medicines to patients.</p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead><tr><th>Patient No</th><th>Patient Name</th><th>Medicines</th><th>Prescribed By</th><th>Date</th><th>Notes</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {prescriptions.map(rx=>(
+                <tr key={rx.id}>
+                  <td className="font-mono font-bold text-blue-600">{rx.patientNo}</td>
+                  <td className="font-medium">{rx.patientName}</td>
+                  <td><div className="flex flex-wrap gap-1">{rx.medicines.map((m,i)=><span key={i} className="badge badge-amber">{m.name} - {m.dosage} - {m.duration}</span>)}</div></td>
+                  <td className="text-sm">{rx.prescribedBy}</td>
+                  <td>{rx.date}</td>
+                  <td className="text-sm text-slate-500 max-w-[150px] truncate">{rx.notes||'-'}</td>
+                  <td><span className="badge badge-blue">{rx.status}</span></td>
+                  <td><button onClick={()=>setDispenseRx(rx)} className="btn btn-success btn-sm">Dispense</button></td>
+                </tr>
+              ))}
+              {prescriptions.length===0&&<tr><td colSpan={8} className="text-center py-8 text-slate-400">No active prescriptions. Prescriptions will appear when doctors prescribe medicines.</td></tr>}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {activeTab === 'stock' && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="stat-card card-hover border border-emerald-200 bg-emerald-50">
-              <p className="text-xs text-emerald-600 font-medium">Total Items</p>
-              <p className="text-2xl font-bold text-emerald-700">{demoMedicines.length}</p>
+      {/* Dispense Confirm Modal */}
+      {dispenseRx&&(
+        <div className="modal-overlay" onClick={()=>setDispenseRx(null)}>
+          <div className="modal-content" onClick={e=>e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-2">Confirm Dispense</h3>
+            <p className="text-sm text-blue-600 mb-4">{dispenseRx.patientNo} - {dispenseRx.patientName}</p>
+            <div className="space-y-2 mb-4">
+              {dispenseRx.medicines.map((m,i)=>(
+                <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="font-semibold text-sm">{m.name}</p>
+                  <p className="text-xs text-slate-600">{m.dosage} | {m.duration} | {m.frequency}{m.instructions?` | ${m.instructions}`:''}</p>
+                </div>
+              ))}
             </div>
-            <div className="stat-card card-hover border border-amber-200 bg-amber-50">
-              <p className="text-xs text-amber-600 font-medium">Low Stock</p>
-              <p className="text-2xl font-bold text-amber-700">{demoMedicines.filter(m => m.status === 'Low Stock').length}</p>
+            {dispenseRx.notes&&<p className="text-sm text-slate-500 mb-4 bg-slate-50 p-2 rounded">Notes: {dispenseRx.notes}</p>}
+            <div className="flex gap-3">
+              <button onClick={confirmDispense} className="btn btn-success btn-lg flex-1">Confirm Dispense</button>
+              <button onClick={()=>setDispenseRx(null)} className="btn btn-outline btn-lg">Cancel</button>
             </div>
-            <div className="stat-card card-hover border border-red-200 bg-red-50">
-              <p className="text-xs text-red-600 font-medium">Out of Stock</p>
-              <p className="text-2xl font-bold text-red-700">{demoMedicines.filter(m => m.status === 'Out of Stock').length}</p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <input className="form-input w-64" placeholder="Search medicine..." value={search} onChange={e => setSearch(e.target.value)} />
-              <button className="btn btn-primary">Add Medicine</button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr><th>Name</th><th>Category</th><th>Stock</th><th>Price</th><th>Unit</th><th>Status</th><th>Actions</th></tr>
-                </thead>
-                <tbody>
-                  {filtered.map(m => (
-                    <tr key={m.id}>
-                      <td className="font-medium">{m.name}</td>
-                      <td><span className="badge badge-blue">{m.category}</span></td>
-                      <td className="font-mono">{m.stock}</td>
-                      <td>Rs. {m.price}</td>
-                      <td>{m.unit}</td>
-                      <td><span className={`badge ${m.status === 'In Stock' ? 'badge-green' : m.status === 'Low Stock' ? 'badge-amber' : 'badge-red'}`}>{m.status}</span></td>
-                      <td><button className="btn btn-outline btn-sm">Edit</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
-
-      {activeTab === 'dispense' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead><tr><th>Patient</th><th>Medicines</th><th>Total</th><th>Date</th></tr></thead>
-              <tbody>
-                {recentDispensed.map(d => (
-                  <tr key={d.id}>
-                    <td className="font-medium">{d.patient}</td>
-                    <td>{d.medicines}</td>
-                    <td className="font-semibold">Rs. {d.total}</td>
-                    <td>{d.date}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
