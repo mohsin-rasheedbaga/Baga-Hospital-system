@@ -80,7 +80,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Total Patients" value={allPatients.length} sub="Total Registered" color="cyan" />
           <StatCard label="PENDING BILLS" value={pendingBills.length} sub={`${currency} ${pendingAmount.toLocaleString()} pending`} color="rose" />
-          <StatCard label="PENDING LAB TESTS" value={pendingLab.length} sub="Awaiting results" color="teal" onClick={() => router.push('/lab')} />
+          <StatCard label="TODAY'S LAB ORDERS" value={pendingLab.length} sub="Awaiting results" color="teal" onClick={() => router.push('/lab')} />
           <StatCard label="ACTIVE ADMISSIONS" value={activeAdmissions.length} sub="Currently admitted" color="indigo" onClick={() => router.push('/admission')} />
         </div>
 
@@ -91,7 +91,6 @@ export default function DashboardPage() {
             <DeptCard name="Reception" count={todayVisits.length} sub="patients today" color="blue" />
             <DeptCard name="Laboratory" count={pendingLab.length} sub="pending tests" color="teal" />
             <DeptCard name="X-Ray" count={pendingXRay.length} sub="pending" color="rose" />
-            <DeptCard name="Ultrasound" count={pendingUSG.length} sub="pending" color="indigo" />
             <DeptCard name="Pharmacy" count={pendingPrescriptions.length} sub="pending scripts" color="amber" />
             <DeptCard name="Admissions" count={activeAdmissions.length} sub="active" color="purple" />
           </div>

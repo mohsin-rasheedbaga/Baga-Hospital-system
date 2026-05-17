@@ -5,8 +5,26 @@ import { usePathname, useRouter } from 'next/navigation';
 import { getHospital } from '@/lib/store';
 import type { User } from '@/lib/types';
 
+interface MenuItem {
+  label: string;
+  path: string;
+  icon: string;
+}
+
+interface SubMenuParent {
+  label: string;
+  icon: string;
+  children: MenuItem[];
+}
+
+type RoleMenu = (MenuItem | SubMenuParent)[];
+
+function isSubMenu(item: MenuItem | SubMenuParent): item is SubMenuParent {
+  return 'children' in item;
+}
+
 // Menu items per role
-const roleMenus: Record<string, { label: string; path: string; icon: string }[]> = {
+const roleMenus: Record<string, RoleMenu> = {
   super_admin: [
     { label: 'Dashboard', path: '/dashboard', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
     { label: 'Reception', path: '/reception', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
@@ -36,8 +54,21 @@ const roleMenus: Record<string, { label: string; path: string; icon: string }[]>
     { label: 'Patient Discharge', path: '/doctor', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
   ],
   lab: [
-    { label: 'Dashboard', path: '/dashboard', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
-    { label: 'Laboratory', path: '/lab', icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
+    { label: 'Dashboard', path: '/lab', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
+    {
+      label: 'Laboratory',
+      icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+      children: [
+        { label: 'Dashboard', path: '/lab', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
+        { label: 'Test Orders', path: '/lab/orders', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
+        { label: 'Sample Collection', path: '/lab/samples', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z' },
+        { label: 'Result Entry', path: '/lab/processing', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
+        { label: 'Completed Reports', path: '/lab/reports', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+        { label: 'Statistics', path: '/lab/statistics', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+        { label: 'Inventory', path: '/lab/inventory', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
+        { label: 'Test Catalog', path: '/lab/settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
+      ],
+    },
   ],
   pharmacy: [
     { label: 'Dashboard', path: '/dashboard', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
@@ -81,10 +112,41 @@ const roleColors: Record<string, string> = {
   accounts: 'bg-cyan-600',
 };
 
+function getPageTitle(pathname: string, menuItems: RoleMenu): string {
+  // Check lab sub-paths first
+  if (pathname.startsWith('/lab/')) {
+    const subMap: Record<string, string> = {
+      '/lab/orders': 'Test Orders',
+      '/lab/samples': 'Sample Collection',
+      '/lab/processing': 'Result Entry',
+      '/lab/reports': 'Completed Reports',
+      '/lab/statistics': 'Statistics',
+      '/lab/inventory': 'Inventory',
+      '/lab/settings': 'Test Catalog',
+    };
+    return subMap[pathname] || 'Laboratory';
+  }
+  
+  // Check regular menu items
+  for (const item of menuItems) {
+    if (isSubMenu(item)) {
+      for (const child of item.children) {
+        const itemBase = child.path.split('?')[0];
+        if (pathname === itemBase || pathname === child.path) return child.label;
+      }
+    } else {
+      const itemBase = item.path.split('?')[0];
+      if (pathname === itemBase || pathname === item.path) return item.label;
+    }
+  }
+  return 'Dashboard';
+}
+
 export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const [session, setSession] = useState<{ userId: string; name: string; role: string; department: string } | null>(null);
   const [hospitalName, setHospitalName] = useState('BAGA Hospital');
 
@@ -99,18 +161,28 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     } catch { router.push('/login'); }
   }, [router]);
 
+  // Auto-expand lab submenu when on a /lab/ sub-path
+  useEffect(() => {
+    if (pathname.startsWith('/lab/')) {
+      setExpandedMenus(prev => prev.includes('Laboratory') ? prev : [...prev, 'Laboratory']);
+    }
+  }, [pathname]);
+
   const handleLogout = () => {
     localStorage.removeItem('baga_session');
     router.push('/login');
   };
 
+  const toggleMenu = (label: string) => {
+    setExpandedMenus(prev =>
+      prev.includes(label) ? prev.filter(m => m !== label) : [...prev, label]
+    );
+  };
+
   if (!session) return null;
 
   const menuItems = roleMenus[session.role] || roleMenus.reception;
-  const currentLabel = menuItems.find(i => {
-    const itemBase = i.path.split('?')[0];
-    return pathname === itemBase || pathname === i.path;
-  })?.label || menuItems.find(i => pathname === i.path)?.label || 'Dashboard';
+  const currentLabel = getPageTitle(pathname, menuItems);
 
   return (
     <div className="flex min-h-screen bg-slate-100">
@@ -136,15 +208,67 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <div className="px-4 mb-2">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Menu</span>
           </div>
-          {menuItems.map((item) => (
-            <Link key={item.path} href={item.path} className={`sidebar-link ${(pathname === item.path || (item.path.includes('?') && pathname === item.path.split('?')[0])) ? 'active' : ''}`}
-              onClick={() => setSidebarOpen(false)}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-              </svg>
-              <span>{item.label}</span>
-            </Link>
-          ))}
+          {menuItems.map((item) => {
+            if (isSubMenu(item)) {
+              const isExpanded = expandedMenus.includes(item.label);
+              const isChildActive = item.children.some(c => {
+                const cBase = c.path.split('?')[0];
+                return pathname === cBase;
+              });
+              return (
+                <div key={item.label}>
+                  <button
+                    onClick={() => toggleMenu(item.label)}
+                    className={`sidebar-link w-full justify-between ${isChildActive ? 'active' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+                      </svg>
+                      <span>{item.label}</span>
+                    </div>
+                    <svg
+                      className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                  {isExpanded && (
+                    <div className="bg-slate-800/50">
+                      {item.children.map(child => {
+                        const childBase = child.path.split('?')[0];
+                        const isActive = pathname === childBase;
+                        return (
+                          <Link
+                            key={child.path}
+                            href={child.path}
+                            className={`sidebar-link pl-12 text-sm ${isActive ? 'active' : ''}`}
+                            onClick={() => setSidebarOpen(false)}
+                          >
+                            <span>{child.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <Link
+                key={item.path}
+                href={item.path}
+                className={`sidebar-link ${(pathname === item.path || (item.path.includes('?') && pathname === item.path.split('?')[0])) ? 'active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+                </svg>
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-slate-700">
